@@ -154,10 +154,13 @@ int t76_pin_test(t76_handle_t *dev, chip_t *chip)
         return -1;
 
     if (t76_verbose) {
-        fprintf(stderr, "Pin detection raw response: ");
-        for (int i = 0; i < 8; i++)
-            fprintf(stderr, "%02X ", msg[i]);
-        fprintf(stderr, "\n");
+        fprintf(stderr, "Pin detection full response (%d bytes):\n", (int)sizeof(msg));
+        for (int i = 0; i < 64; i += 16) {
+            fprintf(stderr, "  %04X: ", i);
+            for (int j = 0; j < 16 && i + j < 64; j++)
+                fprintf(stderr, "%02X ", msg[i + j]);
+            fprintf(stderr, "\n");
+        }
     }
 
     /* End the transaction after pin test (per reference code) */
@@ -194,7 +197,9 @@ int t76_pin_test(t76_handle_t *dev, chip_t *chip)
                 /* NC/VCC/GND - don't test, just show role */
                 printf("%-8s ---   ", role_name);
             } else {
-                int is_good = (byte_idx < 32) ? ((msg[byte_idx] >> bit_idx) & 1) : 0;
+                /* Pin data starts after 8-byte response header */
+                int data_byte = 8 + byte_idx;
+                int is_good = (data_byte < 64) ? ((msg[data_byte] >> bit_idx) & 1) : 0;
                 tested_pins++;
 
                 if (is_good) {
@@ -231,13 +236,13 @@ int t76_pin_test(t76_handle_t *dev, chip_t *chip)
     }
 
     if (t76_verbose) {
-        fprintf(stderr, "\nRaw pin bytes (binary):\n");
+        fprintf(stderr, "\nPin data bytes (binary, starting at offset 8):\n");
         for (int i = 0; i < (pin_count + 7) / 8 && i < 8; i++) {
             fprintf(stderr, "  Byte %d (pins %2d-%2d): ", i,
                     i * 8 + 1, i * 8 + 8 > pin_count ? pin_count : i * 8 + 8);
             for (int b = 7; b >= 0; b--)
-                fprintf(stderr, "%d", (msg[i] >> b) & 1);
-            fprintf(stderr, " (0x%02X)\n", msg[i]);
+                fprintf(stderr, "%d", (msg[8 + i] >> b) & 1);
+            fprintf(stderr, " (0x%02X)\n", msg[8 + i]);
         }
     }
 
