@@ -1,0 +1,7 @@
+*.o
+*.d
+minipro-t76
+tools/extract_chipdb
+reference/
+*.tmp
+*.bak

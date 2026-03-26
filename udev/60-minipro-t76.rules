@@ -1,0 +1,9 @@
+# XGecu T76 Programmer - allow non-root access
+# Install: sudo cp 60-minipro-t76.rules /etc/udev/rules.d/
+# Then: sudo udevadm control --reload-rules && sudo udevadm trigger
+
+# XGecu T76 (VID:A466 PID:1A86)
+SUBSYSTEM=="usb", ATTR{idVendor}=="a466", ATTR{idProduct}=="1a86", MODE="0666", GROUP="plugdev", TAG+="uaccess"
+
+# Also match in bootloader mode (same VID, different PID if applicable)
+SUBSYSTEM=="usb", ATTR{idVendor}=="a466", MODE="0666", GROUP="plugdev", TAG+="uaccess"
