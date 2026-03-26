@@ -244,20 +244,21 @@ int t76_get_device_info(t76_handle_t *dev)
         return -1;
 
     /*
-     * Response layout (from minipro source):
-     * [0]      status (1=normal, 2=bootloader)
-     * [1..4]   firmware version
-     * [5]      hardware version
-     * [6]      protocol version (8 for T76)
-     * [7]      speed
-     * [8..15]  device code
-     * [16..39] serial number
-     * [40..47] reserved
-     * [48..63] reserved
+     * Response layout (verified against stock minipro output):
+     * [0]       status (0=normal, 2=bootloader)
+     * [1..3]    hardware info
+     * [4..5]    firmware version (LE16, e.g. 0x010E = 00.1.14)
+     * [6]       protocol version (8 = T76)
+     * [7]       speed/flags
+     * [8..23]   manufacture date string (16 bytes, null-terminated)
+     * [24..31]  device code (8 bytes)
+     * [32..55]  serial number (24 bytes)
+     * [56..59]  supply voltage? (0x1388 = 5000 = 5.00V)
+     * [60..63]  flags
      */
     dev->status = response[0];
-    dev->firmware = load_int(&response[1], 4, MP_LITTLE_ENDIAN);
-    dev->hw_version = response[5];
+    dev->firmware = load_int(&response[4], 2, MP_LITTLE_ENDIAN);
+    dev->hw_version = response[1];
     dev->version = response[6];
 
     snprintf(dev->firmware_str, sizeof(dev->firmware_str), "%02d.%d.%02d",
@@ -265,16 +266,23 @@ int t76_get_device_info(t76_handle_t *dev)
              (dev->firmware >> 4) & 0x0F,
              dev->firmware & 0x0F);
 
-    memcpy(dev->device_code, &response[8], 8);
+    memcpy(dev->device_code, &response[24], 8);
     dev->device_code[8] = '\0';
 
-    memcpy(dev->serial_number, &response[16], 24);
+    memcpy(dev->serial_number, &response[32], 24);
     dev->serial_number[24] = '\0';
 
+    /* Manufacture date at [8..23] */
+    char mfg_date[17] = { 0 };
+    memcpy(mfg_date, &response[8], 16);
+
     if (dev->version == 8)
-        strncpy(dev->model, "XGecu T76", sizeof(dev->model));
+        strncpy(dev->model, "XGecu T76", sizeof(dev->model) - 1);
     else
         snprintf(dev->model, sizeof(dev->model), "Unknown (ver=%d)", dev->version);
+
+    /* Store mfg date in unused space for display */
+    memcpy(&dev->model[16], mfg_date, 16);
 
     return 0;
 }
@@ -288,13 +296,15 @@ void t76_print_device_info(t76_handle_t *dev)
 
     printf("Found %s\n", dev->model);
     printf("  Firmware: %s (0x%X)\n", dev->firmware_str, dev->firmware);
-    printf("  Hardware: %d\n", dev->hw_version);
     printf("  Protocol: %d\n", dev->version);
     if (dev->device_code[0])
         printf("  Device code: %s\n", dev->device_code);
     if (dev->serial_number[0])
         printf("  Serial: %s\n", dev->serial_number);
+    /* Mfg date stored at model[16] */
+    if (dev->model[16])
+        printf("  Manufactured: %.16s\n", &dev->model[16]);
     printf("  Status: %s\n",
-           dev->status == 1 ? "Normal" :
+           dev->status == 0 ? "Normal" :
            dev->status == 2 ? "Bootloader" : "Unknown");
 }
