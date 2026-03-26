@@ -119,7 +119,7 @@ int t76_end_transaction(t76_handle_t *dev)
 
 int t76_get_ovc_status(t76_handle_t *dev, t76_status_t *status, uint8_t *ovc)
 {
-    uint8_t msg[32] = { 0 };
+    uint8_t msg[64] = { 0 };
 
     msg[0] = T76_REQUEST_STATUS;
     if (t76_msg_send(dev, msg, 8))
@@ -144,7 +144,7 @@ int t76_get_ovc_status(t76_handle_t *dev, t76_status_t *status, uint8_t *ovc)
 int t76_get_chip_id(t76_handle_t *dev, chip_t *chip, uint8_t *type,
                     uint32_t *device_id)
 {
-    uint8_t msg[16] = { 0 };
+    uint8_t msg[64] = { 0 };
 
     msg[0] = T76_READID;
     msg[1] = chip->chip_id_bytes_count;
@@ -168,7 +168,7 @@ int t76_get_chip_id(t76_handle_t *dev, chip_t *chip, uint8_t *type,
 
 int t76_spi_autodetect(t76_handle_t *dev, uint8_t type, uint32_t *device_id)
 {
-    uint8_t msg[16] = { 0 };
+    uint8_t msg[64] = { 0 };
 
     msg[0] = T76_AUTODETECT;
     msg[1] = type;
@@ -369,20 +369,22 @@ int t76_erase(t76_handle_t *dev, chip_t *chip)
 
 int t76_protect_off(t76_handle_t *dev)
 {
-    uint8_t msg[8] = { 0 };
-    msg[0] = T76_PROTECT_OFF;
-    if (t76_msg_send(dev, msg, sizeof(msg)))
+    uint8_t send[8] = { 0 };
+    uint8_t recv[64] = { 0 };
+    send[0] = T76_PROTECT_OFF;
+    if (t76_msg_send(dev, send, sizeof(send)))
         return -1;
-    return t76_msg_recv(dev, msg, sizeof(msg));
+    return t76_msg_recv(dev, recv, sizeof(recv));
 }
 
 int t76_protect_on(t76_handle_t *dev)
 {
-    uint8_t msg[8] = { 0 };
-    msg[0] = T76_PROTECT_ON;
-    if (t76_msg_send(dev, msg, sizeof(msg)))
+    uint8_t send[8] = { 0 };
+    uint8_t recv[64] = { 0 };
+    send[0] = T76_PROTECT_ON;
+    if (t76_msg_send(dev, send, sizeof(send)))
         return -1;
-    return t76_msg_recv(dev, msg, sizeof(msg));
+    return t76_msg_recv(dev, recv, sizeof(recv));
 }
 
 int t76_read_fuses(t76_handle_t *dev, uint8_t type, size_t size,
@@ -490,8 +492,8 @@ int t76_write_bitstream(t76_handle_t *dev, uint8_t *bitstream, size_t length)
     if (t76_msg_send(dev, msg, 8))
         return -1;
 
-    /* Check response */
-    if (t76_msg_recv(dev, msg, 8) || msg[1])
+    /* Check response (recv into 512-byte msg buffer, request 64) */
+    if (t76_msg_recv(dev, msg, 64) || msg[1])
         return -1;
 
     /* Phase 2: Send bitstream in 512-byte chunks (8 header + 504 data) */
@@ -518,7 +520,7 @@ int t76_write_bitstream(t76_handle_t *dev, uint8_t *bitstream, size_t length)
         return -1;
 
     /* Check final status */
-    if (t76_msg_recv(dev, msg, 8) || msg[1])
+    if (t76_msg_recv(dev, msg, 64) || msg[1])
         return -1;
 
     return 0;
@@ -526,16 +528,17 @@ int t76_write_bitstream(t76_handle_t *dev, uint8_t *bitstream, size_t length)
 
 int t76_reset_fpga(t76_handle_t *dev)
 {
-    uint8_t msg[8] = { 0 };
+    uint8_t send[8] = { 0 };
+    uint8_t recv[64] = { 0 };
 
-    msg[0] = T76_WRITE_BITSTREAM;
-    msg[1] = T76_RESET_FPGA;
-    format_int(&msg[4], T76_FPGA_MAGIC, 4, MP_LITTLE_ENDIAN);
+    send[0] = T76_WRITE_BITSTREAM;
+    send[1] = T76_RESET_FPGA;
+    format_int(&send[4], T76_FPGA_MAGIC, 4, MP_LITTLE_ENDIAN);
 
-    if (t76_msg_send(dev, msg, 8))
+    if (t76_msg_send(dev, send, 8))
         return -1;
 
-    return (t76_msg_recv(dev, msg, 8) || msg[1]) ? -1 : 0;
+    return (t76_msg_recv(dev, recv, sizeof(recv)) || recv[1]) ? -1 : 0;
 }
 
 /*
