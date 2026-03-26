@@ -489,14 +489,23 @@ int t76_write_bitstream(t76_handle_t *dev, uint8_t *bitstream, size_t length)
     format_int(&msg[2], BS_PACKET_SIZE, 2, MP_LITTLE_ENDIAN);
     format_int(&msg[4], length, 4, MP_LITTLE_ENDIAN);
 
-    if (t76_msg_send(dev, msg, 8))
+    if (t76_msg_send(dev, msg, 8)) {
+        fprintf(stderr, "Bitstream: failed to send BEGIN command\n");
         return -1;
+    }
 
     /* Check response (recv into 512-byte msg buffer, request 64) */
-    if (t76_msg_recv(dev, msg, 64) || msg[1])
+    if (t76_msg_recv(dev, msg, 64)) {
+        fprintf(stderr, "Bitstream: no response to BEGIN command\n");
         return -1;
+    }
+    if (msg[1]) {
+        fprintf(stderr, "Bitstream: BEGIN rejected (status=0x%02X)\n", msg[1]);
+        return -1;
+    }
 
     /* Phase 2: Send bitstream in 512-byte chunks (8 header + 504 data) */
+    size_t chunks_sent = 0;
     for (size_t i = 0; i < length; i += payload_size) {
         size_t block_size = ((i + payload_size) <= length)
             ? payload_size : (length - i);
@@ -507,8 +516,12 @@ int t76_write_bitstream(t76_handle_t *dev, uint8_t *bitstream, size_t length)
         format_int(&msg[2], block_size, 2, MP_LITTLE_ENDIAN);
         memcpy(&msg[8], &bitstream[i], block_size);
 
-        if (t76_msg_send(dev, msg, BS_PACKET_SIZE))
+        if (t76_msg_send(dev, msg, BS_PACKET_SIZE)) {
+            fprintf(stderr, "Bitstream: failed to send chunk %zu (offset %zu)\n",
+                    chunks_sent, i);
             return -1;
+        }
+        chunks_sent++;
     }
 
     /* Phase 3: End bitstream */
@@ -516,12 +529,20 @@ int t76_write_bitstream(t76_handle_t *dev, uint8_t *bitstream, size_t length)
     msg[0] = T76_WRITE_BITSTREAM;
     msg[1] = T76_END_BS;
 
-    if (t76_msg_send(dev, msg, 8))
+    if (t76_msg_send(dev, msg, 8)) {
+        fprintf(stderr, "Bitstream: failed to send END command\n");
         return -1;
+    }
 
     /* Check final status */
-    if (t76_msg_recv(dev, msg, 64) || msg[1])
+    if (t76_msg_recv(dev, msg, 64)) {
+        fprintf(stderr, "Bitstream: no response to END command\n");
         return -1;
+    }
+    if (msg[1]) {
+        fprintf(stderr, "Bitstream: upload rejected (status=0x%02X)\n", msg[1]);
+        return -1;
+    }
 
     return 0;
 }

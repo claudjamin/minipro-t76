@@ -43,7 +43,26 @@ static const char *find_algo_dir(const char *override)
 }
 
 /*
- * Load an algorithm file from disk.
+ * T76 .alg file structure:
+ *   Bytes 0-3:     Header/version
+ *   Bytes 4-11:    8-byte bitstream metadata (size info + checksum)
+ *   Bytes 0xC0+:   Description string (e.g. "NAND", "SPI25F11")
+ *   Bytes 0x1000:  Padding (0xFF)
+ *   Bytes 0x1001+: Actual FPGA bitstream data
+ *
+ * The data sent to the T76 is: 8 bytes from offset 4, then
+ * everything from offset 4097 (0x1001) onwards.
+ * This matches minipro's dump-alg-minipro.bash:
+ *   (tail -c +5 $file | head -c 8 && tail -c +$T76_ALG_OFFSET $file)
+ */
+#define T76_ALG_HEADER_SIZE   4      /* skip first 4 bytes */
+#define T76_ALG_META_SIZE     8      /* 8-byte metadata at offset 4 */
+#define T76_ALG_DATA_OFFSET   4097   /* bitstream data starts here (0x1001) */
+
+/*
+ * Load a T76 algorithm file from disk.
+ * Strips the header and assembles the bitstream as:
+ *   [8 bytes from offset 4] + [data from offset 4097 to end]
  * Returns malloc'd buffer that caller must free.
  */
 static uint8_t *load_algo_file(const char *path, size_t *length)
@@ -56,27 +75,51 @@ static uint8_t *load_algo_file(const char *path, size_t *length)
     long fsize = ftell(f);
     fseek(f, 0, SEEK_SET);
 
-    if (fsize <= 0 || fsize > 1024 * 1024) { /* 1MB max */
+    if (fsize <= 0 || fsize > 2 * 1024 * 1024) { /* 2MB max */
         fclose(f);
         return NULL;
     }
 
-    uint8_t *data = malloc(fsize);
-    if (!data) {
+    /* Read entire file first */
+    uint8_t *raw = malloc(fsize);
+    if (!raw) {
         fclose(f);
         return NULL;
     }
 
-    size_t nread = fread(data, 1, fsize, f);
+    size_t nread = fread(raw, 1, fsize, f);
     fclose(f);
 
     if ((long)nread != fsize) {
-        free(data);
+        free(raw);
         return NULL;
     }
 
+    /* Check if file is large enough for the T76 format */
+    if (fsize > T76_ALG_DATA_OFFSET) {
+        /* T76 .alg format: assemble bitstream from header metadata + data */
+        size_t data_len = fsize - T76_ALG_DATA_OFFSET;
+        size_t total = T76_ALG_META_SIZE + data_len;
+
+        uint8_t *bitstream = malloc(total);
+        if (!bitstream) {
+            free(raw);
+            return NULL;
+        }
+
+        /* Copy 8-byte metadata from offset 4 */
+        memcpy(bitstream, &raw[T76_ALG_HEADER_SIZE], T76_ALG_META_SIZE);
+        /* Copy bitstream data from offset 4097 */
+        memcpy(bitstream + T76_ALG_META_SIZE, &raw[T76_ALG_DATA_OFFSET], data_len);
+
+        free(raw);
+        *length = total;
+        return bitstream;
+    }
+
+    /* Small file -- treat as raw bitstream (already processed) */
     *length = nread;
-    return data;
+    return raw;
 }
 
 /*
