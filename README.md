@@ -203,12 +203,15 @@ sudo make udev
 | List all chips | `./minipro-t76 -l` |
 | Search for a chip | `./minipro-t76 -l W25Q*` |
 | Show adapter setup | `./minipro-t76 -p "W25Q32 @SOIC8" -a` |
+| Pin contact test | `sudo ./minipro-t76 -p "W25Q32 @SOIC8" -z` |
 | Read chip ID | `sudo ./minipro-t76 -p "W25Q32 @SOIC8" -d` |
 | Read chip to file | `sudo ./minipro-t76 -p "W25Q32 @SOIC8" -r dump.bin` |
 | Write file to chip | `sudo ./minipro-t76 -p "W25Q32 @SOIC8" -w firmware.bin` |
 | Erase chip | `sudo ./minipro-t76 -p "W25Q32 @SOIC8" -e` |
 | Erase + Write | `sudo ./minipro-t76 -p "W25Q32 @SOIC8" -e -w firmware.bin` |
 | Verify chip vs file | `sudo ./minipro-t76 -p "W25Q32 @SOIC8" -m firmware.bin` |
+| Verbose output | Add `-v` to any command |
+| Full USB hex dumps | Add `-vv` to any command |
 
 ### Step-by-Step: Dumping Firmware from a SPI Flash Chip
 
@@ -385,6 +388,42 @@ sudo ./minipro-t76 -p "AT28C256 @DIP28" -r contents.bin
 sudo ./minipro-t76 -p "AT28C256 @DIP28" -e -w new_data.bin
 ```
 
+### Pin Contact Test (-z)
+
+Before reading/writing, check if the chip is making good contact with the socket:
+
+```bash
+# Run pin contact test
+sudo ./minipro-t76 -p "MT29F2G08ABDWP@TSOP48" -z
+
+# With verbose output (shows raw pin bitmask)
+sudo ./minipro-t76 -v -p "MT29F2G08ABDWP@TSOP48" -z
+```
+
+The test only checks **signal pins** -- NC (No Connect), VCC, and GND pins are skipped since they don't need signal contact. For example, a TSOP48 NAND chip has only ~15 signal pins out of 48 total.
+
+Output shows each pin's role and status:
+```
+  Pin  Role     Status     Pin  Role     Status
+    1  Signal    OK         25  NC       ---
+    2  Signal    OK         26  Signal   *BAD*
+    9  GND      ---         37  GND      ---
+   23  VCC      ---         48  VCC      ---
+```
+
+### Verbose and Debug Modes
+
+```bash
+# -v   Verbose: shows chip parameters, bitstream loading, responses
+sudo ./minipro-t76 -v -p "W25Q32 @SOIC8" -d
+
+# -vv  Debug: full USB hex dumps of every packet (colored)
+#      Shows all EP 0x01/0x81 traffic for protocol analysis
+sudo ./minipro-t76 -vv -p "W25Q32 @SOIC8" -d 2>&1 | head -50
+
+# Useful for comparing against Wireshark captures of the Windows software
+```
+
 ### Common Troubleshooting
 
 **"XGecu T76 not found"**
@@ -433,7 +472,8 @@ Adapter/Setup:
   -a               Show adapter setup image for the selected chip
   -I <dir>         Use alternate image directory
 
-Algorithm:
+Diagnostics:
+  -z               Pin contact test (check for bad connections)
   -A <dir>         Use alternate algorithm directory (default: ./algoT76)
 
 File format:
@@ -445,7 +485,7 @@ Database:
 
 Programmer:
   -i               Show programmer hardware/firmware info
-  -v               Verbose output
+  -v               Verbose output (stack: -v info, -vv hex dumps)
   -h, --help       Show help
   -V, --version    Show version
 ```
