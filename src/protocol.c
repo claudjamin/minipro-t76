@@ -96,12 +96,27 @@ int t76_begin_transaction(t76_handle_t *dev, chip_t *chip)
     /* Algorithm number is high byte of variant */
     msg[63] = (uint8_t)(chip->variant >> 8);
 
+    if (t76_verbose) {
+        fprintf(stderr, "BEGIN_TRANS: protocol=%02X variant=%04X algo=%02X\n",
+                chip->protocol_id, chip->variant, msg[63]);
+        fprintf(stderr, "  voltages=%06X chip_info=%02X pin_map=%02X\n",
+                chip->voltages_raw, msg[6], msg[7]);
+        fprintf(stderr, "  code_size=%u page_size=%u read_buf=%u\n",
+                chip->code_memory_size, chip->page_size, chip->read_buffer_size);
+    }
+
     if (t76_msg_send(dev, msg, sizeof(msg)))
         return -1;
 
     /* Check overcurrent */
-    if (t76_get_ovc_status(dev, NULL, &ovc))
+    t76_status_t status;
+    if (t76_get_ovc_status(dev, &status, &ovc))
         return -1;
+
+    if (t76_verbose)
+        fprintf(stderr, "OVC status: error=%02X ovc=%02X addr=%08X\n",
+                status.error, ovc, status.address);
+
     if (ovc) {
         fprintf(stderr, "Overcurrent protection!\n");
         return -1;
