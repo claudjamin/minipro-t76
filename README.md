@@ -48,13 +48,21 @@ minipro-t76 needs two sets of files from the official Windows Xgpro installer th
 | **Minipro releases** | https://661.org/files/minipro/ | Pre-built tarballs |
 | **T76 hardware docs** | https://github.com/radiomanV/Xgecu_T76 | FPGA pin maps, schematics, bitstream tools |
 
-**Quick download and extract (one-liner):**
+**Quick download and extract:**
 ```bash
-# Download from GitHub mirror and extract algorithm + image files
+# Download from GitHub mirror
 wget https://github.com/Kreeblah/XGecu_Software/raw/refs/heads/master/Xgpro/13/xgpro_T76_V1317.rar
+
+# The RAR contains a self-extracting EXE which contains the actual files
+# Extract twice: RAR -> EXE -> files
 mkdir xgpro_tmp && unrar x xgpro_T76_V1317.rar xgpro_tmp/
+cd xgpro_tmp && unrar x Xgpro_T76_V1317.exe && cd ..
+
+# Copy algorithm files (REQUIRED) and images (optional) into your minipro-t76 dir
 cp -r xgpro_tmp/algoT76 /path/to/minipro-t76/
 cp -r xgpro_tmp/img /path/to/minipro-t76/
+
+# Clean up
 rm -rf xgpro_tmp xgpro_T76_V1317.rar
 ```
 
@@ -74,12 +82,18 @@ sudo minipro -p "W25Q32JV @SOIC8" -r dump.bin
 # Install unrar if needed
 sudo apt install unrar
 
-# Download or copy the Xgpro installer RAR
-# (it's a self-extracting RAR, e.g., Xgpro_T76_V1317.exe)
-
-# Extract everything
+# If you have the .rar file (e.g. xgpro_T76_V1317.rar):
+# Step 1: Extract the RAR (contains a self-extracting EXE)
 mkdir xgpro_extracted
-unrar x Xgpro_T76_V1317.exe xgpro_extracted/
+unrar x xgpro_T76_V1317.rar xgpro_extracted/
+
+# Step 2: Extract the EXE (it's also a RAR archive with the actual files)
+cd xgpro_extracted
+unrar x Xgpro_T76_V1317.exe
+cd ..
+
+# If you already have the .exe directly:
+# mkdir xgpro_extracted && unrar x Xgpro_T76_V1317.exe xgpro_extracted/
 
 # Copy the algorithm files (REQUIRED)
 cp -r xgpro_extracted/algoT76 /path/to/minipro-t76/
