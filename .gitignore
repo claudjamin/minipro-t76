@@ -5,3 +5,4 @@ tools/extract_chipdb
 reference/
 *.tmp
 *.bak
+*.alg

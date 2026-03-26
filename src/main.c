@@ -103,6 +103,7 @@ int main(int argc, char **argv)
     char *verify_file_path = NULL;
     char *chipdb_path = NULL;
     char *image_dir = NULL;
+    char *algo_dir = NULL;
     char *list_filter = NULL;
     file_format_t file_fmt = FMT_AUTO;
     int do_erase = 0, do_detect = 0, do_info = 0;
@@ -117,7 +118,7 @@ int main(int argc, char **argv)
     };
 
     int opt;
-    while ((opt = getopt_long(argc, argv, "p:r:w:m:f:D:I:l::ediuPavhV",
+    while ((opt = getopt_long(argc, argv, "p:r:w:m:f:D:I:A:l::ediuPavhV",
                               long_opts, NULL)) != -1) {
         switch (opt) {
         case 'p': chip_name = optarg; break;
@@ -127,6 +128,7 @@ int main(int argc, char **argv)
         case 'f': file_fmt = parse_format(optarg); break;
         case 'D': chipdb_path = optarg; break;
         case 'I': image_dir = optarg; break;
+        case 'A': algo_dir = optarg; break;
         case 'l': do_list = 1; list_filter = optarg; break;
         case 'e': do_erase = 1; break;
         case 'd': do_detect = 1; break;
@@ -232,6 +234,13 @@ int main(int argc, char **argv)
 
     if (verbose)
         t76_print_device_info(&dev);
+
+    /* Load FPGA algorithm (required before any chip operation) */
+    if (chip) {
+        ret = t76_load_algorithm(&dev, chip, algo_dir);
+        if (ret < 0)
+            goto fail;
+    }
 
     /* Detect chip ID */
     if (do_detect) {

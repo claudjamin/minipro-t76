@@ -229,6 +229,7 @@ int t76_read_calibration(t76_handle_t *dev, uint8_t *buffer, size_t len);
 /* FPGA bitstream */
 int t76_write_bitstream(t76_handle_t *dev, uint8_t *bitstream, size_t length);
 int t76_reset_fpga(t76_handle_t *dev);
+int t76_load_algorithm(t76_handle_t *dev, chip_t *chip, const char *algo_dir);
 
 /* Chip database */
 int chipdb_load(const char *path);

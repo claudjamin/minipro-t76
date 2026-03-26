@@ -292,6 +292,9 @@ Adapter/Setup:
   -a               Show adapter setup image for the selected chip
   -I <dir>         Use alternate image directory
 
+Algorithm:
+  -A <dir>         Use alternate algorithm directory (default: ./algoT76)
+
 File format:
   -f <format>      Force file format: bin, ihex, srec (default: auto-detect)
 
@@ -317,6 +320,173 @@ Programmer:
 The format is auto-detected on read based on file content. For write output, use `-f` to specify:
 ```bash
 sudo ./minipro-t76 -p W25Q32 -r dump.hex -f ihex
+```
+
+### FPGA Algorithm Files
+
+The T76 has an FPGA that must be loaded with a bitstream before any chip operation. The algorithm files (`.alg`) are in the `algoT76/` directory, extracted from Xgpro. The tool loads them automatically.
+
+If you see "algorithm directory not found", copy the `algoT76/` folder from the Xgpro installer:
+```bash
+# The algoT76 dir should be in the same directory as the minipro-t76 binary
+ls algoT76/   # should show 362 .alg files
+```
+
+You can also specify a custom path:
+```bash
+sudo ./minipro-t76 -A /path/to/algoT76 -p "W25Q32 @SOIC8" -r dump.bin
+```
+
+---
+
+## Chip Not in the Database? Alternative Methods
+
+If your exact chip isn't in the database, **don't panic**. Most flash chips are pin-compatible clones of each other. Here's how to work around it.
+
+### Method 1: Use an Equivalent Chip Entry
+
+SPI NOR flash chips from different manufacturers are interchangeable if they have the same density and package. Pick any chip with matching size:
+
+**32 Mbit (4 MB) SPI Flash — all interchangeable:**
+| Your Chip | Use This Entry Instead |
+|---|---|
+| GD25Q32 (GigaDevice) | `W25Q32 @SOIC8` |
+| MX25L3233F (Macronix) | `W25Q32 @SOIC8` |
+| IS25LP032 (ISSI) | `W25Q32 @SOIC8` |
+| EN25QH32 (EON) | `W25Q32 @SOIC8` |
+| XM25QH32B (XMC) | `W25Q32 @SOIC8` |
+| BY25Q32BS (BOYA) | `W25Q32 @SOIC8` |
+| XT25F32B (XTX) | `W25Q32 @SOIC8` |
+| ZB25VQ32 (Zetta) | `W25Q32 @SOIC8` |
+| P25Q32H (Puya) | `W25Q32 @SOIC8` |
+| FM25Q32A (Fudan Micro) | `W25Q32 @SOIC8` |
+
+**Same pattern for other sizes:**
+| Size | Use Entry |
+|---|---|
+| 8 Mbit (1 MB) | `W25Q80 @SOIC8` |
+| 16 Mbit (2 MB) | `W25Q16 @SOIC8` |
+| 64 Mbit (8 MB) | `W25Q64 @SOIC8` |
+| 128 Mbit (16 MB) | `W25Q128 @SOIC8` |
+| 256 Mbit (32 MB) | `W25Q256 @SOIC16` |
+
+This works because all standard SPI flash chips use the same commands (0x03 read, 0x02 program, 0x20 erase, 0x9F JEDEC ID).
+
+**Exception:** SST/Microchip chips (SST25VFxxx, SST26VFxxx) use a different protection scheme. Use the SST-specific entry if available, or issue a Global Block Unlock (0x98) first.
+
+### Method 2: Identify by JEDEC ID
+
+If you don't know what the chip is, read its JEDEC ID:
+
+```bash
+# Use any SPI flash entry to read the ID
+sudo ./minipro-t76 -p "W25Q32 @SOIC8" -d
+```
+
+The 3 bytes tell you everything:
+- **Byte 1** = Manufacturer
+- **Byte 2** = Memory type
+- **Byte 3** = Density
+
+**Common manufacturer IDs:**
+| ID | Manufacturer |
+|---|---|
+| `0xEF` | Winbond |
+| `0xC8` | GigaDevice |
+| `0xC2` | Macronix |
+| `0x9D` | ISSI |
+| `0xBF` | SST/Microchip |
+| `0x01` | Spansion/Infineon |
+| `0x20` | Micron (also XMC!) |
+| `0x1C` | EON / cFeon |
+| `0x1F` | Atmel / Microchip |
+| `0x68` | BOYA |
+| `0x0B` | XTX |
+| `0xBA` | Zbit/Zetta |
+| `0x85` | Puya |
+| `0xA1` | Fudan Micro |
+| `0x8C` | ESMT / Elite |
+
+**Common density codes (byte 3):**
+| Code | Size |
+|---|---|
+| `0x14` | 8 Mbit (1 MB) |
+| `0x15` | 16 Mbit (2 MB) |
+| `0x16` | 32 Mbit (4 MB) |
+| `0x17` | 64 Mbit (8 MB) |
+| `0x18` | 128 Mbit (16 MB) |
+| `0x19` | 256 Mbit (32 MB) |
+
+**Example:** ID `0xC84016` = GigaDevice (`0xC8`), 32 Mbit (`0x16`) → use `W25Q32 @SOIC8`
+
+### Method 3: Check for Rebranded/Remarked Chips
+
+Budget chips from AliExpress/eBay are often relabeled. Common scams:
+- Chip marked "W25Q128" but actually 64 Mbit — verify with `-d`
+- No-name chip with sanded-off markings — JEDEC ID still works
+- "BOYA" or "XTX" branded chip — these are real chips, just use the Winbond equivalent entry of the same size
+
+### Method 4: Unknown Parallel Flash (TSOP48)
+
+For parallel NOR flash chips you can't identify:
+
+1. **Check if it has CFI**: Most parallel NOR flash since ~2000 supports the Common Flash Interface standard, which means the programmer can query the chip's parameters automatically
+
+2. **Try common equivalents by pin count**:
+   - 48-pin TSOP: Try `MX29LV640EB @TSOP48` or `AM29LV640D @TSOP48`
+   - The key is matching the bus width (x8 vs x16) and voltage (3.3V vs 5V)
+
+3. **Read the ID first**: Use `-d` to read the manufacturer and device ID, then search the database:
+   ```bash
+   sudo ./minipro-t76 -p "MX29LV640EB @TSOP48" -d
+   # If ID is 0x01227E: Spansion S29GL064, use that entry
+   ```
+
+### Method 5: NAND Flash
+
+NAND flash (like your MT29F2G08) requires the correct algorithm loaded. The chip family determines which `.alg` file to use. If the exact part isn't in the database:
+
+1. Find a chip from the same family:
+   ```bash
+   ./minipro-t76 -l "MT29F*"
+   ./minipro-t76 -l "K9F*"     # Samsung NAND
+   ```
+
+2. NAND chips with the same page size (2048+64 or 4096+224) and bus width (x8 or x16) are usually interchangeable at the read level
+
+3. The NAND ID structure: Byte 1 = Manufacturer, Byte 2 = Device code. Common NAND manufacturers:
+   | ID | Manufacturer |
+   |---|---|
+   | `0x2C` | Micron |
+   | `0xEC` | Samsung |
+   | `0xAD` | SK Hynix |
+   | `0x98` | Kioxia/Toshiba |
+   | `0x01` | Spansion |
+   | `0xC8` | GigaDevice |
+
+### Quick Decision Tree
+
+```
+Can't find your chip in the database?
+│
+├─ Is it an 8-pin SPI flash?
+│  └─ YES → Use W25Qxx @SOIC8 with matching size (check with -d)
+│
+├─ Is it a 16-pin SPI flash?
+│  └─ YES → Use W25Qxx @SOIC16 or @SOP16 with matching size
+│
+├─ Is it a TSOP48 parallel flash?
+│  └─ YES → Try MX29LVxxx or AM29Fxxx with matching size, read ID first with -d
+│
+├─ Is it a NAND flash?
+│  └─ YES → Find same family in database (MT29F*, K9F*, etc.)
+│
+├─ Is it an EEPROM (8-pin, small)?
+│  └─ YES → Use AT24Cxx or 93Cxx entry with matching size
+│
+└─ Still stuck?
+   └─ Read the JEDEC ID with -d using any similar chip entry
+      Then search: ./minipro-t76 -l "*" | grep <manufacturer_prefix>
 ```
 
 ---

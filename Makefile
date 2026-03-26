@@ -9,7 +9,7 @@ CFLAGS += -Iinclude
 LDFLAGS +=
 LIBS = -lusb-1.0
 
-SRCS = src/main.c src/usb.c src/protocol.c src/chipdb.c src/fileio.c src/adapter.c
+SRCS = src/main.c src/usb.c src/protocol.c src/chipdb.c src/fileio.c src/adapter.c src/algorithm.c
 OBJS = $(SRCS:.c=.o)
 TARGET = minipro-t76
 
