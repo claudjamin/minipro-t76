@@ -13,6 +13,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/stat.h>
+#include <sys/wait.h>
 #include <unistd.h>
 #include "t76.h"
 
@@ -169,7 +170,23 @@ static const char *get_adapter_description(chip_t *chip)
     return "Check adapter requirements for this package";
 }
 
-/* Try to open an image with available viewers */
+/* Validate a path contains no shell metacharacters */
+static int path_is_safe(const char *path)
+{
+    for (const char *p = path; *p; p++) {
+        switch (*p) {
+        case '\'': case '"': case ';': case '|': case '&':
+        case '$': case '`': case '\n': case '\r': case '\\':
+            return 0;
+        }
+    }
+    return 1;
+}
+
+/*
+ * Try to open an image with available viewers.
+ * Uses fork/execvp to avoid shell injection (this tool runs as root).
+ */
 static int open_image(const char *path)
 {
     struct stat st;
@@ -178,42 +195,58 @@ static int open_image(const char *path)
         return -1;
     }
 
+    /* Reject non-regular files (symlinks, devices, etc.) */
+    if (!S_ISREG(st.st_mode)) {
+        fprintf(stderr, "Error: '%s' is not a regular file\n", path);
+        return -1;
+    }
+
     printf("Opening: %s\n", path);
 
-    /* Try image viewers in order of preference */
+    /* Try image viewers in order of preference using fork/exec (no shell) */
     const char *viewers[] = {
-        "xdg-open",     /* Standard Linux */
-        "feh",          /* Lightweight image viewer */
-        "eog",          /* GNOME Eye of GNOME */
-        "display",      /* ImageMagick */
-        "xv",           /* Classic X viewer */
-        "open",         /* macOS */
-        NULL
+        "xdg-open", "feh", "eog", "display", "xv", "open",
+        "chafa", "catimg", NULL
     };
 
     for (int i = 0; viewers[i]; i++) {
-        char cmd[512];
-        /* Check if the viewer exists */
-        snprintf(cmd, sizeof(cmd), "which %s >/dev/null 2>&1", viewers[i]);
-        if (system(cmd) == 0) {
-            snprintf(cmd, sizeof(cmd), "%s '%s' &", viewers[i], path);
-            return system(cmd);
+        /* Check if viewer exists by trying to find it in PATH */
+        char viewer_path[256];
+        snprintf(viewer_path, sizeof(viewer_path), "/usr/bin/%s", viewers[i]);
+        if (access(viewer_path, X_OK) != 0) {
+            snprintf(viewer_path, sizeof(viewer_path), "/usr/local/bin/%s", viewers[i]);
+            if (access(viewer_path, X_OK) != 0)
+                continue;
         }
-    }
 
-    /* If no graphical viewer, try to display in terminal */
-    char cmd[512];
-    snprintf(cmd, sizeof(cmd), "which chafa >/dev/null 2>&1");
-    if (system(cmd) == 0) {
-        /* chafa renders images in the terminal */
-        snprintf(cmd, sizeof(cmd), "chafa --size=80x40 '%s'", path);
-        return system(cmd);
-    }
+        pid_t pid = fork();
+        if (pid < 0) {
+            perror("fork");
+            return -1;
+        }
 
-    snprintf(cmd, sizeof(cmd), "which catimg >/dev/null 2>&1");
-    if (system(cmd) == 0) {
-        snprintf(cmd, sizeof(cmd), "catimg -w 80 '%s'", path);
-        return system(cmd);
+        if (pid == 0) {
+            /* Child process */
+            if (strcmp(viewers[i], "chafa") == 0) {
+                execlp(viewers[i], viewers[i], "--size=80x40", path, NULL);
+            } else if (strcmp(viewers[i], "catimg") == 0) {
+                execlp(viewers[i], viewers[i], "-w", "80", path, NULL);
+            } else {
+                execlp(viewers[i], viewers[i], path, NULL);
+            }
+            _exit(127); /* exec failed */
+        }
+
+        /* Parent: for terminal viewers (chafa/catimg), wait for completion */
+        if (strcmp(viewers[i], "chafa") == 0 ||
+            strcmp(viewers[i], "catimg") == 0) {
+            int status;
+            waitpid(pid, &status, 0);
+            return WIFEXITED(status) ? WEXITSTATUS(status) : -1;
+        }
+
+        /* For GUI viewers, don't wait */
+        return 0;
     }
 
     fprintf(stderr, "No image viewer found. Image is at: %s\n", path);

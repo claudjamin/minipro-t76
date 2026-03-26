@@ -32,13 +32,12 @@ static void cleanup(void)
     t76_close(&dev);
 }
 
+static volatile sig_atomic_t interrupted = 0;
+
 static void sighandler(int sig)
 {
     (void)sig;
-    fprintf(stderr, "\nInterrupted.\n");
-    t76_end_transaction(&dev);
-    t76_close(&dev);
-    exit(1);
+    interrupted = 1;
 }
 
 static void usage(const char *prog)

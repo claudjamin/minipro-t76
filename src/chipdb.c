@@ -14,6 +14,7 @@
 
 #define MAX_CHIPS 32000
 #define MAX_LINE  1024
+#define MAX_CODE_SIZE (256 * 1024 * 1024) /* 256MB sanity cap */
 
 static chip_t *chips = NULL;
 static int chip_count = 0;
@@ -96,7 +97,7 @@ int chipdb_load(const char *path)
             continue;
 
         c->chip_type = parse_chip_type(type_str);
-        c->code_memory_size = code_size;
+        c->code_memory_size = (code_size <= MAX_CODE_SIZE) ? code_size : 0;
         c->page_size = page_size;
         c->read_buffer_size = read_blk ? read_blk : 256;
         c->write_buffer_size = write_blk ? write_blk : 256;

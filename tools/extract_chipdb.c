@@ -312,14 +312,26 @@ int main(int argc, char **argv)
     long file_size = ftell(f);
     fseek(f, 0, SEEK_SET);
 
-    uint8_t *data = malloc(file_size);
-    if (!data) {
+    if (file_size <= 0) {
+        fprintf(stderr, "Error: invalid file size\n");
         fclose(f);
         return 1;
     }
 
-    fread(data, 1, file_size, f);
+    uint8_t *data = calloc(1, file_size);
+    if (!data) {
+        fprintf(stderr, "Error: out of memory (%ld bytes)\n", file_size);
+        fclose(f);
+        return 1;
+    }
+
+    size_t nread = fread(data, 1, file_size, f);
     fclose(f);
+    if ((long)nread != file_size) {
+        fprintf(stderr, "Warning: short read (%zu of %ld bytes)\n",
+                nread, file_size);
+        file_size = nread;
+    }
 
     printf("Loaded %s (%ld bytes)\n", dll_path, file_size);
     printf("Scanning for chip names...\n");

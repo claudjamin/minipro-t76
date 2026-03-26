@@ -11,6 +11,9 @@
 #include <unistd.h>
 #include "t76.h"
 
+/* Maximum single block transfer size (256KB should cover any chip) */
+#define MAX_BLOCK_SIZE (256 * 1024)
+
 /* Progress bar */
 static void print_progress(size_t current, size_t total, const char *label)
 {
@@ -194,6 +197,11 @@ int t76_read_block(t76_handle_t *dev, chip_t *chip, uint8_t mem_type,
 
     (void)chip;
 
+    if (len > MAX_BLOCK_SIZE) {
+        fprintf(stderr, "Error: read block size %zu exceeds maximum\n", len);
+        return -1;
+    }
+
     if (mem_type == MP_CODE) {
         msg[0] = T76_READ_CODE;
         format_int(&msg[2], len, 2, MP_LITTLE_ENDIAN);
@@ -266,6 +274,11 @@ int t76_write_block(t76_handle_t *dev, chip_t *chip, uint8_t mem_type,
     uint8_t msg[64] = { 0 };
 
     (void)chip;
+
+    if (len > MAX_BLOCK_SIZE) {
+        fprintf(stderr, "Error: write block size %zu exceeds maximum\n", len);
+        return -1;
+    }
 
     format_int(&msg[2], len, 2, MP_LITTLE_ENDIAN);
     format_int(&msg[4], addr, 4, MP_LITTLE_ENDIAN);
@@ -378,6 +391,11 @@ int t76_read_fuses(t76_handle_t *dev, uint8_t type, size_t size,
     uint8_t msg[64] = { 0 };
     uint8_t cmd;
 
+    if (size > 63) {
+        fprintf(stderr, "Error: fuse read size %zu exceeds maximum (63)\n", size);
+        return -1;
+    }
+
     switch (type) {
     case MP_FUSE_USER: cmd = T76_READ_USER; break;
     case MP_FUSE_CFG:  cmd = T76_READ_CFG; break;
@@ -415,10 +433,15 @@ int t76_write_fuses(t76_handle_t *dev, uint8_t type, size_t size,
         return -1;
     }
 
+    if (size > 60) {
+        fprintf(stderr, "Error: fuse write size %zu exceeds maximum (60)\n", size);
+        return -1;
+    }
+
     msg[0] = cmd;
     msg[1] = items_count;
     format_int(&msg[2], size, 2, MP_LITTLE_ENDIAN);
-    memcpy(&msg[4], buffer, size < 60 ? size : 60);
+    memcpy(&msg[4], buffer, size);
 
     if (t76_msg_send(dev, msg, sizeof(msg)))
         return -1;
@@ -428,6 +451,11 @@ int t76_write_fuses(t76_handle_t *dev, uint8_t type, size_t size,
 int t76_read_calibration(t76_handle_t *dev, uint8_t *buffer, size_t len)
 {
     uint8_t msg[64] = { 0 };
+
+    if (len > 63) {
+        fprintf(stderr, "Error: calibration read size %zu exceeds maximum (63)\n", len);
+        return -1;
+    }
 
     msg[0] = T76_READ_CALIBRATION;
     format_int(&msg[2], len, 2, MP_LITTLE_ENDIAN);
