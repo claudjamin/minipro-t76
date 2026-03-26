@@ -58,7 +58,8 @@ static const char *find_algo_dir(const char *override)
  */
 #define T76_ALG_HEADER_SIZE   4      /* skip first 4 bytes */
 #define T76_ALG_META_SIZE     8      /* 8-byte metadata at offset 4 */
-#define T76_ALG_DATA_OFFSET   4097   /* bitstream data starts here (0x1001) */
+#define T76_ALG_DATA_OFFSET   4096   /* bitstream data starts here (0x1000) */
+/* Note: minipro bash uses "tail -c +4097" which is 1-indexed = C offset 4096 */
 
 /*
  * Load a T76 algorithm file from disk.
