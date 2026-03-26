@@ -6,11 +6,16 @@ Drop-in replacement for the Windows-only Xgpro software -- no phone-home, no tel
 
 ## Features
 
+- **65,178 chip database** converted from minipro's `infoic.xml` with full parameters
+- **NAND flash support** -- reverse-engineered streaming protocol, 264MB dump in 15 seconds
 - **Read/Write/Erase/Verify** chips via command line
-- **23,800+ chip database** extracted from Xgpro V13.17
 - **Adapter setup images** -- shows which adapter to use and chip placement (`-a` flag)
+- **Chip connectivity test** (`-z`) -- verifies chip-to-socket contact before operations
 - **Intel HEX, SREC, and binary** file format support
 - **SPI flash autodetect**
+- **Verbose/debug modes** (`-v` info, `-vv` full USB hex dumps for protocol analysis)
+- **Windows native NAND reader** (`nand_final.exe`) for USB 3.0 SuperSpeed transfers
+- **Clean WinUSB driver** included -- no Chinese software needed
 - **No network access** -- zero connections to the internet, ever
 
 ## Build
@@ -755,9 +760,67 @@ Can't find your chip in the database?
 
 ---
 
+## Windows WinUSB Driver
+
+The T76 needs the WinUSB driver installed on Windows for proper USB 3.0 communication. A clean driver package is included in `driver/`:
+
+```cmd
+cd driver
+install.bat       :: Run as Administrator to install
+uninstall.bat     :: Run as Administrator to remove
+```
+
+This uses **only Microsoft's built-in WinUSB.sys** -- no custom binaries, no Chinese software. The driver is required for:
+- The Windows `nand_final.exe` NAND reader
+- Proper USB 3.0 SuperSpeed endpoint initialization
+- Correct operation through `usbipd` (WSL USB forwarding)
+
+See `driver/README.txt` for details.
+
+---
+
+## Project Structure
+
+```
+minipro-t76/
+├── src/
+│   ├── main.c           # CLI interface
+│   ├── usb.c            # libusb transport (EP 0x01/0x81 cmd, EP 0x05/0x82 data)
+│   ├── protocol.c       # Chip operations + NAND streaming protocol
+│   ├── chipdb.c         # 65,178 chip database loader
+│   ├── fileio.c         # Binary/Intel HEX/SREC I/O
+│   ├── adapter.c        # Adapter image display
+│   ├── algorithm.c      # FPGA bitstream loader (.alg files)
+│   └── pintest.c        # Chip connectivity test
+├── include/t76.h        # Protocol constants and API
+├── chipdb.txt           # Full chip database (from minipro infoic.xml)
+├── tools/
+│   ├── nand_final.c     # Windows native NAND reader (WinUSB API)
+│   ├── nand_scan2.c     # Quick NAND content scanner
+│   ├── nand_addr_test.c # NAND address format discovery tool
+│   ├── convert_infoic.py# Convert minipro infoic.xml to chipdb.txt
+│   ├── extract_chipdb.c # Extract chip names from InfoICT76.dll
+│   └── sniff_xgpro.py   # Wireshark USB capture decoder
+├── driver/
+│   ├── T76_WinUSB.inf   # Clean WinUSB driver (Microsoft WinUSB.sys)
+│   ├── install.bat      # Driver installer
+│   ├── uninstall.bat    # Driver uninstaller
+│   └── README.txt       # Driver documentation
+├── udev/
+│   └── 60-minipro-t76.rules  # Linux udev rule for non-root access
+├── Makefile
+└── README.md
+```
+
+**Not included (must be extracted from Xgpro):**
+- `algoT76/` -- 362 FPGA algorithm files (~66MB)
+- `img/` -- 138 adapter setup images (~7MB)
+
+---
+
 ## Protocol
 
-Based on the verified USB protocol from the [minipro](https://gitlab.com/DavidGriffith/minipro) open-source project.
+Based on the verified USB protocol from the [minipro](https://gitlab.com/DavidGriffith/minipro) open-source project, with NAND protocol reverse-engineered from Wireshark captures of Xgpro.
 
 | Endpoint | Direction | Purpose |
 |----------|-----------|---------|
@@ -766,17 +829,32 @@ Based on the verified USB protocol from the [minipro](https://gitlab.com/DavidGr
 | 0x05 | OUT | Bulk data write (T76-specific) |
 | 0x82 | IN | Bulk data read (T76-specific) |
 
+### NAND Read Protocol (reverse-engineered)
+
+```
+1. NAND_INIT (cmd 0x02, 64 bytes) -- configure NAND interface
+2. BEGIN_TRANS (cmd 0x03, 128 bytes) -- extended format for NAND
+3. READ_CODE (cmd 0x0D, 16 bytes per command):
+   [0D 00] [block_LE16] [10 00 04 00 08 00 08 00 69 01 00 00]
+4. Each command → 4 chunks of 33,792 bytes on EP 0x82
+5. 33,792 = 16 pages × 2,112 bytes (2,048 data + 64 spare)
+6. 4 chunks = 64 pages = 1 NAND erase block (135,168 bytes)
+7. 2,048 commands for entire MT29F2G08 (264MB in ~15 seconds)
+```
+
 ## Hardware
 
 - **MCU:** WCH CH569 (RISC-V, USB 3.0 SuperSpeed)
 - **FPGA:** Anlogic EG4X20BG256
 - **USB:** VID `0xA466`, PID `0x1A86`
+- **ZIF:** 48-pin with shift-register pin drivers
 
 ## Credits
 
 - Protocol: [minipro project](https://gitlab.com/DavidGriffith/minipro) by David Griffith and radiomanV
 - T76 hardware docs: [radiomanV/Xgecu_T76](https://github.com/radiomanV/Xgecu_T76)
-- Chip database: Extracted from XGecu InfoICT76.dll
+- Chip database: Converted from minipro's `infoic.xml`
+- NAND protocol: Reverse-engineered from Wireshark USB captures of Xgpro V13.09
 
 ## License
 
