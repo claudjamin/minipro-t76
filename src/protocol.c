@@ -154,13 +154,23 @@ int t76_get_chip_id(t76_handle_t *dev, chip_t *chip, uint8_t *type,
     if (t76_msg_recv(dev, msg, sizeof(msg)))
         return -1;
 
+    if (t76_verbose) {
+        fprintf(stderr, "READID response (first 16 bytes): ");
+        for (int i = 0; i < 16; i++)
+            fprintf(stderr, "%02X ", msg[i]);
+        fprintf(stderr, "\n");
+    }
+
     if (type)
         *type = msg[0];
     if (device_id) {
-        /* Chip ID is in bytes 1..4 depending on chip_id_bytes_count */
+        /* Chip ID is in bytes 2..5 (minipro convention: byte 0=type, byte 1=padding) */
         *device_id = 0;
-        for (int i = 0; i < chip->chip_id_bytes_count && i < 4; i++)
-            *device_id |= (uint32_t)msg[1 + i] << (i * 8);
+        int id_bytes = chip->chip_id_bytes_count;
+        if (id_bytes <= 0) id_bytes = 2;
+        if (id_bytes > 4) id_bytes = 4;
+        for (int i = 0; i < id_bytes; i++)
+            *device_id |= (uint32_t)msg[2 + i] << (i * 8);
     }
 
     return 0;

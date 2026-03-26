@@ -14,7 +14,7 @@
 
 #define MAX_CHIPS 70000
 #define MAX_LINE  2048
-#define MAX_CODE_SIZE (256 * 1024 * 1024)
+#define MAX_CODE_SIZE (2048UL * 1024 * 1024) /* 2GB cap for NAND */
 
 static chip_t *chips = NULL;
 static int chip_count = 0;
