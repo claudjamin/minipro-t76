@@ -146,8 +146,8 @@ int t76_get_chip_id(t76_handle_t *dev, chip_t *chip, uint8_t *type,
 {
     uint8_t msg[64] = { 0 };
 
+    /* Send READID command - only byte 0 is set, rest must be zero */
     msg[0] = T76_READID;
-    msg[1] = chip->chip_id_bytes_count;
 
     if (t76_msg_send(dev, msg, 8))
         return -1;
@@ -161,16 +161,29 @@ int t76_get_chip_id(t76_handle_t *dev, chip_t *chip, uint8_t *type,
         fprintf(stderr, "\n");
     }
 
+    /*
+     * Response format (from minipro t76.c):
+     *   msg[0] = chip ID type (1-5)
+     *   msg[1] = format info
+     *   msg[2..] = chip ID bytes
+     *
+     * Endianness depends on type:
+     *   Type 3 or 4 = little-endian
+     *   Type 1, 2, 5 = big-endian
+     */
+    uint8_t id_type = msg[0];
     if (type)
-        *type = msg[0];
+        *type = id_type;
+
     if (device_id) {
-        /* Chip ID is in bytes 2..5 (minipro convention: byte 0=type, byte 1=padding) */
-        *device_id = 0;
         int id_bytes = chip->chip_id_bytes_count;
         if (id_bytes <= 0) id_bytes = 2;
         if (id_bytes > 4) id_bytes = 4;
-        for (int i = 0; i < id_bytes; i++)
-            *device_id |= (uint32_t)msg[2 + i] << (i * 8);
+
+        uint8_t endian = (id_type == MP_ID_TYPE3 || id_type == MP_ID_TYPE4)
+                         ? MP_LITTLE_ENDIAN : MP_BIG_ENDIAN;
+
+        *device_id = (uint32_t)load_int(&msg[2], id_bytes, endian);
     }
 
     return 0;
