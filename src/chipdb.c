@@ -1,7 +1,7 @@
 /*
  * minipro-t76 - Chip database
  *
- * Loads chip definitions from chipdb.txt.
+ * Loads chip definitions from chipdb.txt (converted from minipro's infoic.xml).
  */
 
 #define _GNU_SOURCE
@@ -12,9 +12,9 @@
 #include <fnmatch.h>
 #include "t76.h"
 
-#define MAX_CHIPS 32000
-#define MAX_LINE  1024
-#define MAX_CODE_SIZE (256 * 1024 * 1024) /* 256MB sanity cap */
+#define MAX_CHIPS 70000
+#define MAX_LINE  2048
+#define MAX_CODE_SIZE (256 * 1024 * 1024)
 
 static chip_t *chips = NULL;
 static int chip_count = 0;
@@ -84,53 +84,64 @@ int chipdb_load(const char *path)
 
         chip_t *c = &chips[chip_count];
         char type_str[32] = {0};
-        unsigned int code_size = 0, page_size = 0, read_blk = 0, write_blk = 0;
-        unsigned int pins = 0, vcc = 0, vpp = 0;
+        char algo_str[16] = {0};
+        unsigned int code_size = 0, data_size = 0, page_size = 0;
+        unsigned int read_buf = 0, write_buf = 0;
+        unsigned int protocol_id = 0, variant = 0, voltages = 0;
+        unsigned int pulse_delay = 0, flags = 0, chip_info = 0;
+        unsigned int pin_map = 0, pkg_details = 0;
+        unsigned int pages_per_block = 0, data2_size = 0;
 
+        /* New format: 19 tab-separated fields */
         int n = sscanf(line,
-            "%39[^\t]\t%31[^\t]\t%x\t%u\t%*u\t%u\t%u\t%u\t%u\t%*u\t%u\t%u",
+            "%39[^\t]\t%31[^\t]\t%x\t%u\t%u\t%u\t%u\t%u\t%x\t%x\t%x\t%u\t%x\t%x\t%x\t%x\t%15[^\t]\t%u\t%u",
             c->name, type_str, &c->chip_id,
-            &code_size, &page_size, &read_blk, &write_blk,
-            &pins, &vcc, &vpp);
+            &code_size, &data_size, &page_size,
+            &read_buf, &write_buf,
+            &protocol_id, &variant, &voltages,
+            &pulse_delay, &flags, &chip_info,
+            &pin_map, &pkg_details,
+            algo_str, &pages_per_block, &data2_size);
 
-        if (n < 3)
-            continue;
+        if (n < 3) {
+            /* Try old format (fewer fields) */
+            memset(c, 0, sizeof(*c));
+            unsigned int pins = 0, vcc = 0, vpp = 0;
+            n = sscanf(line,
+                "%39[^\t]\t%31[^\t]\t%x\t%u\t%*u\t%u\t%u\t%u\t%u\t%*u\t%u\t%u",
+                c->name, type_str, &c->chip_id,
+                &code_size, &page_size, &read_buf, &write_buf,
+                &pins, &vcc, &vpp);
+            if (n < 3)
+                continue;
+            pkg_details = (pins & 0xFF) << 24;
+        }
 
         c->chip_type = parse_chip_type(type_str);
         c->code_memory_size = (code_size <= MAX_CODE_SIZE) ? code_size : 0;
+        c->data_memory_size = data_size;
+        c->data_memory2_size = data2_size;
         c->page_size = page_size;
-        c->read_buffer_size = read_blk ? read_blk : 256;
-        c->write_buffer_size = write_blk ? write_blk : 256;
+        c->pages_per_block = pages_per_block;
+        c->read_buffer_size = read_buf ? read_buf : 256;
+        c->write_buffer_size = write_buf ? write_buf : 256;
+        c->protocol_id = protocol_id;
+        c->variant = variant;
+        c->voltages_raw = voltages;
+        c->pulse_delay = pulse_delay;
+        c->flags_raw = flags;
+        c->chip_info = chip_info;
+        c->pin_map = pin_map;
+        c->package_details = pkg_details;
 
-        /* Extract pin count from package if not in data */
-        if (!pins) {
-            const char *at = strchr(c->name, '@');
-            if (at) {
-                const char *p = at + 1;
-                while (*p && !isdigit(*p)) p++;
-                if (*p) pins = atoi(p);
-            }
-        }
+        if (algo_str[0] && strcmp(algo_str, "0") != 0)
+            strncpy(c->algo_name, algo_str, sizeof(c->algo_name) - 1);
 
-        /* Set package_details (pin count in upper byte) */
-        c->package_details = (pins & 0xFF) << 24;
-
-        /* Set default protocol for SPI flash */
-        if (strncasecmp(c->name, "W25", 3) == 0 ||
-            strncasecmp(c->name, "MX25", 4) == 0 ||
-            strncasecmp(c->name, "GD25", 4) == 0 ||
-            strncasecmp(c->name, "EN25", 4) == 0 ||
-            strncasecmp(c->name, "SST25", 5) == 0 ||
-            strncasecmp(c->name, "AT25", 4) == 0 ||
-            strncasecmp(c->name, "N25Q", 4) == 0 ||
-            strncasecmp(c->name, "S25FL", 5) == 0 ||
-            strncasecmp(c->name, "M25P", 4) == 0) {
-            c->protocol_id = SPI_PROTOCOL;
-            c->chip_id_bytes_count = 3;
-            if (pins <= 8)
-                c->variant = (SPI_DEVICE_8P << 8);
-            else
-                c->variant = (SPI_DEVICE_16P << 8);
+        /* Derive chip_id_bytes_count from chip_id */
+        if (c->chip_id) {
+            if (c->chip_id > 0xFFFF) c->chip_id_bytes_count = 3;
+            else if (c->chip_id > 0xFF) c->chip_id_bytes_count = 2;
+            else c->chip_id_bytes_count = 1;
         }
 
         chip_count++;
@@ -199,6 +210,8 @@ void chipdb_list(const char *filter)
                 printf("  %6u B ", chips[i].code_memory_size);
             if (chips[i].chip_id)
                 printf("  ID:%06X", chips[i].chip_id);
+            if (chips[i].algo_name[0])
+                printf("  [%s]", chips[i].algo_name);
             printf("\n");
             shown++;
         }
