@@ -38,20 +38,23 @@ static const struct {
     const char *image;
     const char *description;
 } adapter_map[] = {
-    /* TSOP48 - NOR flash uses Adapter001, NAND uses Adapter008/009 */
-    { "@TSOP48",    "Adapter001.jpg",        "TSOP48 adapter required (T76_F48_05-001 / ADP_F48-EX-1)" },
+    /* TSOP48 - XGecu green adapter SN-ADP-048-0.5 (supports TSOP28/32/40/48) */
+    { "@TSOP48",    "T56T48.jpg",            "TSOP48 adapter required (SN-ADP-048-0.5) - Pin 1 at top-left" },
 
     /* TSOP40 */
-    { "@TSOP40",    "Adapter003.jpg",        "TSOP40 adapter required (8-bit: Adapter003, 16-bit: Adapter004)" },
+    { "@TSOP40",    "T56T48.jpg",            "TSOP40 adapter required (SN-ADP-048-0.5) - Pin 1 at top-left" },
 
     /* TSOP32 */
-    { "@TSOP32",    "Adapter005.jpg",        "TSOP32 adapter required (TSOP32->DIP32)" },
+    { "@TSOP32",    "T56T48.jpg",            "TSOP32 adapter required (SN-ADP-048-0.5) - Pin 1 at top-left" },
 
-    /* TSOP56 / SOP56 */
-    { "@TSOP56",    "Adapter006.jpg",        "SOP56 adapter required (T76_P56_08-005)" },
+    /* TSOP28 */
+    { "@TSOP28",    "T56T48.jpg",            "TSOP28 adapter required (SN-ADP-048-0.5) - Pin 1 at top-left" },
+
+    /* TSOP56 / SOP56 - T76 adapter with ISP header */
+    { "@TSOP56",    "T76T56.jpg",            "TSOP56 adapter required (TSOP56-0.5mm) - Supports TSOP28-56 + ISP" },
 
     /* SOP44 */
-    { "@SOP44",     "Adapter002.jpg",        "SOP44 adapter required (ADP_S44-EX-1)" },
+    { "@SOP44",     "T56SOP44.jpg",          "SOP44 adapter required (SOP44->DIP44)" },
 
     /* SPI flash - 8-pin */
     { "@SOIC8",     "T76_25_WSON8.jpg",      "SPI Flash 8-pin SOIC/WSON - Place in ZIF socket or use SOIC8 clip" },
@@ -88,25 +91,22 @@ static const struct {
     { "@DIP42",     "T48_DIP42.jpg",          "DIP42 adapter or alignment required" },
     { "@DIP48",     "NoAdapter.jpg",          "DIP48 - Place directly in 48-pin ZIF socket" },
 
-    /* PLCC */
-    { "@PLCC20",    "T86PLCC32.jpg",          "PLCC20 adapter required" },
-    { "@PLCC28",    "T86PLCC32.jpg",          "PLCC28 adapter required" },
-    { "@PLCC32",    "T86PLCC32.jpg",          "PLCC32 adapter required" },
-    { "@PLCC44",    "T86PLCC44.jpg",          "PLCC44 adapter required" },
-    { "@PLCC52",    "T86PLCC44.jpg",          "PLCC52 adapter required" },
+    /* PLCC - T56 images have 48-pin ZIF wiring (correct for T76) */
+    { "@PLCC20",    "T56PLCC20.jpg",          "PLCC20 adapter required (PLCC20->DIP)" },
+    { "@PLCC28",    "T56PLCC28.jpg",          "PLCC28 adapter required (PLCC28->DIP)" },
+    { "@PLCC32",    "T56PLCC32.jpg",          "PLCC32 adapter required (PLCC32->DIP)" },
+    { "@PLCC44",    "T56PLCC44.jpg",          "PLCC44 adapter required (PLCC44->DIP)" },
+    { "@PLCC52",    "T56PLCC44.jpg",          "PLCC52 adapter required (PLCC44 adapter)" },
 
     /* TQFP */
-    { "@TQFP32",    "T86TQFP32.jpg",         "TQFP32 adapter required" },
-    { "@TQFP44",    "T86TQFP44.jpg",         "TQFP44 adapter required" },
-    { "@TQFP64",    "Adapter007.jpg",         "TQFP64 adapter required (TQFP64->DIP40 DIY)" },
-
-    /* TSOP28 */
-    { "@TSOP28",    "T56TSOP28.jpg",          "TSOP28 adapter required" },
+    { "@TQFP32",    "T56TQFP32.jpg",         "TQFP32 adapter required" },
+    { "@TQFP44",    "T56TQFP44.jpg",         "TQFP44 adapter required" },
+    { "@TQFP64",    "T56TQFP64_ATMEGA.jpg",  "TQFP64 adapter required (ATmega)" },
 
     /* SOJ */
-    { "@SOJ28",     "Adapter001.jpg",         "SOJ28 - Use TSOP48 adapter" },
-    { "@SOJ32",     "Adapter001.jpg",         "SOJ32 - Use TSOP48 adapter" },
-    { "@SOJ44",     "Adapter002.jpg",         "SOJ44 - Use SOP44 adapter" },
+    { "@SOJ28",     "T56T48.jpg",             "SOJ28 - Use TSOP48 adapter" },
+    { "@SOJ32",     "T56T48.jpg",             "SOJ32 - Use TSOP48 adapter" },
+    { "@SOJ44",     "T56SOP44.jpg",           "SOJ44 - Use SOP44 adapter" },
 
     /* eMMC/SD */
     { "@eMMC",      "T76_EMMC_Prog.jpg",      "eMMC BGA adapter required" },
