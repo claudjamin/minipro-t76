@@ -19,12 +19,40 @@
 #define DEFAULT_IMAGE_DIR  "/usr/share/minipro-t76/img"
 #define LOCAL_IMAGE_DIR    "./img"
 
-/* Adapter name -> image filename mapping for common adapters */
+/*
+ * Adapter name -> image filename mapping
+ * Verified from Xgpro_T76.exe string analysis:
+ *   Adapter001.jpg = TSOP48 NOR flash (T76_F48_05-001 / ADP_F48-EX-1)
+ *   Adapter002.jpg = SOP44 (ADP_S44-EX-1)
+ *   Adapter003.jpg = TSOP40A 8-bit (ADP_F48-EX-1)
+ *   Adapter004.jpg = TSOP40B 16-bit (ADP_F40-0.5-14)
+ *   Adapter005.jpg = TSOP32 (TSOP32->DIP32)
+ *   Adapter006.jpg = SOP56 (T76_P56_08-005)
+ *   Adapter007.jpg = TQFP64 DIY (TQFP64->DIP40)
+ *   Adapter008.jpg = TSOP48 NAND x8 (ADP_F48-EX-2)
+ *   Adapter010.jpg = LQFP128
+ *   T76B48B63.jpg  = BGA48/BGA63 adapter
+ */
 static const struct {
     const char *package;
     const char *image;
     const char *description;
 } adapter_map[] = {
+    /* TSOP48 - NOR flash uses Adapter001, NAND uses Adapter008/009 */
+    { "@TSOP48",    "Adapter001.jpg",        "TSOP48 adapter required (T76_F48_05-001 / ADP_F48-EX-1)" },
+
+    /* TSOP40 */
+    { "@TSOP40",    "Adapter003.jpg",        "TSOP40 adapter required (8-bit: Adapter003, 16-bit: Adapter004)" },
+
+    /* TSOP32 */
+    { "@TSOP32",    "Adapter005.jpg",        "TSOP32 adapter required (TSOP32->DIP32)" },
+
+    /* TSOP56 / SOP56 */
+    { "@TSOP56",    "Adapter006.jpg",        "SOP56 adapter required (T76_P56_08-005)" },
+
+    /* SOP44 */
+    { "@SOP44",     "Adapter002.jpg",        "SOP44 adapter required (ADP_S44-EX-1)" },
+
     /* SPI flash - 8-pin */
     { "@SOIC8",     "T76_25_WSON8.jpg",      "SPI Flash 8-pin SOIC/WSON - Place in ZIF socket or use SOIC8 clip" },
     { "@SOP8",      "T76_25_WSON8.jpg",      "SPI Flash 8-pin SOP - Place in ZIF or use SOP8 clip" },
@@ -37,18 +65,12 @@ static const struct {
     { "@SOIC16",    "T76_SOP16_127EX.jpg",   "SPI Flash 16-pin SOIC - Use SOP16 adapter (T76_SOP16_127EX)" },
     { "@SOP16",     "T76_SOP16_127EX.jpg",   "SOP16 adapter (T76_SOP16_127EX)" },
 
-    /* TSOP48 parallel flash */
-    { "@TSOP48",    "T76B48B63.jpg",         "TSOP48 adapter required (T76_B48)" },
-
-    /* TSOP56 */
-    { "@TSOP56",    "T76P56.jpg",            "TSOP56 adapter required (T76_P56)" },
-
     /* BGA */
     { "@BGA24",     "T76BGA24_4x6.jpg",      "BGA24 adapter required - Check pin pitch (4x6 or 5x5)" },
-    { "@BGA48",     "T76B48B63.jpg",          "BGA48 adapter required" },
-    { "@BGA63",     "T76B48B63.jpg",          "BGA63 adapter required" },
+    { "@BGA48",     "T76B48B63.jpg",          "BGA48 adapter required (T76_B48)" },
+    { "@BGA63",     "T76B48B63.jpg",          "BGA63 adapter required (T76_B63)" },
     { "@BGA64",     "T76BGA64.jpg",           "BGA64 adapter required" },
-    { "@BGA100",    "T76EMMCBGA.jpg",         "BGA100 adapter required" },
+    { "@BGA100",    "T76EMMCBGA.jpg",         "BGA100 adapter required (eMMC)" },
     { "@BGA132",    "T76EMMCBGA.jpg",         "BGA132 adapter required (eMMC)" },
     { "@BGA153",    "T76EMMCBGA.jpg",         "BGA153 adapter required (eMMC)" },
     { "@BGA169",    "T76EMMCBGA.jpg",         "BGA169 adapter required (eMMC)" },
@@ -67,7 +89,7 @@ static const struct {
     { "@DIP48",     "NoAdapter.jpg",          "DIP48 - Place directly in 48-pin ZIF socket" },
 
     /* PLCC */
-    { "@PLCC20",    "T86PLCC32.jpg",          "PLCC adapter required" },
+    { "@PLCC20",    "T86PLCC32.jpg",          "PLCC20 adapter required" },
     { "@PLCC28",    "T86PLCC32.jpg",          "PLCC28 adapter required" },
     { "@PLCC32",    "T86PLCC32.jpg",          "PLCC32 adapter required" },
     { "@PLCC44",    "T86PLCC44.jpg",          "PLCC44 adapter required" },
@@ -75,15 +97,16 @@ static const struct {
 
     /* TQFP */
     { "@TQFP32",    "T86TQFP32.jpg",         "TQFP32 adapter required" },
-    { "@TQFP44",    "T86TQFP32.jpg",         "TQFP44 adapter required" },
+    { "@TQFP44",    "T86TQFP44.jpg",         "TQFP44 adapter required" },
+    { "@TQFP64",    "Adapter007.jpg",         "TQFP64 adapter required (TQFP64->DIP40 DIY)" },
+
+    /* TSOP28 */
+    { "@TSOP28",    "T56TSOP28.jpg",          "TSOP28 adapter required" },
 
     /* SOJ */
-    { "@SOJ28",     "T76B48B63.jpg",          "SOJ adapter required" },
-    { "@SOJ32",     "T76B48B63.jpg",          "SOJ adapter required" },
-    { "@SOJ44",     "T76B48B63.jpg",          "SOJ44 adapter required" },
-
-    /* SOP44 */
-    { "@SOP44",     "T76B48B63.jpg",          "SOP44 adapter required" },
+    { "@SOJ28",     "Adapter001.jpg",         "SOJ28 - Use TSOP48 adapter" },
+    { "@SOJ32",     "Adapter001.jpg",         "SOJ32 - Use TSOP48 adapter" },
+    { "@SOJ44",     "Adapter002.jpg",         "SOJ44 - Use SOP44 adapter" },
 
     /* eMMC/SD */
     { "@eMMC",      "T76_EMMC_Prog.jpg",      "eMMC BGA adapter required" },
