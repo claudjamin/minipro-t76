@@ -40,18 +40,29 @@ minipro-t76 needs two sets of files from the official Windows Xgpro installer th
 
 | Source | Link | Notes |
 |--------|------|-------|
+| **GitHub Mirror** (recommended) | https://github.com/Kreeblah/XGecu_Software/tree/master/Xgpro/13 | GitHub-hosted mirror, no China firewall issues |
+| **Direct download (V13.17)** | https://github.com/Kreeblah/XGecu_Software/raw/refs/heads/master/Xgpro/13/xgpro_T76_V1317.rar | Latest T76 installer (~65MB) |
+| **Direct download (V13.11)** | https://github.com/Kreeblah/XGecu_Software/raw/refs/heads/master/Xgpro/13/xgpro_T76_V1311.rar | Previous version |
 | **XGecu Official** | http://www.xgecu.com/en/Download.html | May be slow/blocked (hosted in China) |
-| **Minipro project** (recommended) | https://gitlab.com/DavidGriffith/minipro | Open-source alternative with its own database. Includes `infoic.xml` with full chip parameters and algorithm support. Build from source to get a working T76 tool without needing Xgpro at all. |
-| **Minipro releases** | https://661.org/files/minipro/ | Pre-built tarballs of the minipro project |
+| **Minipro project** | https://gitlab.com/DavidGriffith/minipro | Open-source alternative -- includes its own chip database and algorithm files, no Xgpro needed |
+| **Minipro releases** | https://661.org/files/minipro/ | Pre-built tarballs |
 | **T76 hardware docs** | https://github.com/radiomanV/Xgecu_T76 | FPGA pin maps, schematics, bitstream tools |
 
-**If xgecu.com is blocked or slow:** The Xgpro installer is a self-extracting RAR. It's often shared on electronics forums, EEVblog, and included on USB drives shipped with the programmer. Check the USB drive that came with your T76 -- it usually has the installer on it.
+**Quick download and extract (one-liner):**
+```bash
+# Download from GitHub mirror and extract algorithm + image files
+wget https://github.com/Kreeblah/XGecu_Software/raw/refs/heads/master/Xgpro/13/xgpro_T76_V1317.rar
+mkdir xgpro_tmp && unrar x xgpro_T76_V1317.rar xgpro_tmp/
+cp -r xgpro_tmp/algoT76 /path/to/minipro-t76/
+cp -r xgpro_tmp/img /path/to/minipro-t76/
+rm -rf xgpro_tmp xgpro_T76_V1317.rar
+```
 
 **Alternative: Use minipro directly.** The open-source [minipro](https://gitlab.com/DavidGriffith/minipro) project fully supports the T76 and bundles its own chip database (`infoic.xml`) and algorithm files. It doesn't need any files from Xgpro:
 ```bash
 git clone https://gitlab.com/DavidGriffith/minipro.git
 cd minipro
-sudo apt install build-essential libusb-1.0-0-dev pkg-config
+sudo apt install build-essential libusb-1.0-0-dev pkg-config bsdtar
 make
 sudo make install
 sudo minipro -p "W25Q32JV @SOIC8" -r dump.bin
