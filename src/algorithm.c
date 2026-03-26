@@ -19,6 +19,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <stdint.h>
 #include <sys/stat.h>
 #include "t76.h"
 
@@ -96,30 +97,76 @@ static uint8_t *load_algo_file(const char *path, size_t *length)
     }
 
     /* Check if file is large enough for the T76 format */
-    if (fsize > T76_ALG_DATA_OFFSET) {
-        /* T76 .alg format: assemble bitstream from header metadata + data */
+    if (fsize <= T76_ALG_DATA_OFFSET) {
+        /* Small file -- treat as raw bitstream (already processed) */
+        *length = nread;
+        return raw;
+    }
+
+    /*
+     * T76 .alg format processing:
+     *
+     * The 8-byte metadata at offset 4:
+     *   Bytes 0-3: final uncompressed bitstream size (LE32)
+     *   Bytes 4-7: CRC32 of compressed data
+     *
+     * The data at offset 4097 is RLE-compressed (16-bit word based):
+     *   - Non-zero word: copy directly to output
+     *   - Zero word followed by count word: emit count zero words
+     *
+     * This "level 2" decompression matches minipro's database.c
+     */
+
+    /* Read final size from metadata at offset 4 */
+    uint32_t algo_size = (uint32_t)raw[4] |
+                         ((uint32_t)raw[5] << 8) |
+                         ((uint32_t)raw[6] << 16) |
+                         ((uint32_t)raw[7] << 24);
+
+    if (algo_size == 0 || algo_size > 2 * 1024 * 1024) {
+        fprintf(stderr, "Warning: unusual algo_size=%u, trying raw data\n", algo_size);
+        /* Fall back to sending raw data from offset 4097 */
         size_t data_len = fsize - T76_ALG_DATA_OFFSET;
-        size_t total = T76_ALG_META_SIZE + data_len;
-
-        uint8_t *bitstream = malloc(total);
-        if (!bitstream) {
-            free(raw);
-            return NULL;
-        }
-
-        /* Copy 8-byte metadata from offset 4 */
-        memcpy(bitstream, &raw[T76_ALG_HEADER_SIZE], T76_ALG_META_SIZE);
-        /* Copy bitstream data from offset 4097 */
-        memcpy(bitstream + T76_ALG_META_SIZE, &raw[T76_ALG_DATA_OFFSET], data_len);
-
+        uint8_t *bitstream = malloc(data_len);
+        if (!bitstream) { free(raw); return NULL; }
+        memcpy(bitstream, &raw[T76_ALG_DATA_OFFSET], data_len);
         free(raw);
-        *length = total;
+        *length = data_len;
         return bitstream;
     }
 
-    /* Small file -- treat as raw bitstream (already processed) */
-    *length = nread;
-    return raw;
+    /* Allocate output buffer for decompressed bitstream */
+    uint8_t *bitstream = calloc(1, algo_size);
+    if (!bitstream) {
+        free(raw);
+        return NULL;
+    }
+
+    /* RLE decompress: 16-bit word based */
+    uint16_t *out = (uint16_t *)bitstream;
+    uint16_t *in = (uint16_t *)(&raw[T76_ALG_DATA_OFFSET]);
+    uint16_t *in_end = (uint16_t *)(&raw[fsize]);
+    uint16_t *out_end = (uint16_t *)(bitstream + algo_size);
+
+    while (in < in_end && out < out_end) {
+        uint16_t val = *in++;
+        if (val != 0) {
+            *out++ = val;
+        } else {
+            if (in >= in_end) break;
+            uint16_t count = *in++;
+            if (count == 0) break;
+            /* Emit 'count' zero words */
+            if (out + count > out_end)
+                count = out_end - out;
+            memset(out, 0, count * sizeof(uint16_t));
+            out += count;
+        }
+    }
+
+    free(raw);
+    *length = algo_size;
+    return bitstream;
 }
 
 /*
