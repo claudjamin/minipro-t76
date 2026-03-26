@@ -102,6 +102,29 @@ void t76_close(t76_handle_t *dev)
     dev->is_connected = 0;
 }
 
+/* Hex dump helper for debug output */
+static void hex_dump(const char *label, uint8_t *data, int len, uint8_t ep)
+{
+    if (t76_verbose < 2)
+        return;
+    fprintf(stderr, "\033[33m%s %d bytes on EP 0x%02X\033[0m\n", label, len, ep);
+    for (int i = 0; i < len; i += 16) {
+        fprintf(stderr, "  %04X: ", i);
+        for (int j = 0; j < 16; j++) {
+            if (i + j < len)
+                fprintf(stderr, "\033[36m%02X \033[0m", data[i + j]);
+            else
+                fprintf(stderr, "   ");
+        }
+        fprintf(stderr, " ");
+        for (int j = 0; j < 16 && i + j < len; j++) {
+            uint8_t c = data[i + j];
+            fprintf(stderr, "%c", (c >= 32 && c < 127) ? c : '.');
+        }
+        fprintf(stderr, "\n");
+    }
+}
+
 /*
  * msg_send - Send command message on EP 0x01 OUT
  */
@@ -111,6 +134,8 @@ int t76_msg_send(t76_handle_t *dev, uint8_t *data, size_t len)
 
     if (!dev || !dev->is_connected)
         return -1;
+
+    hex_dump("Write", data, len > 64 ? 64 : len, T76_MSG_OUT_EP);
 
     int ret = libusb_bulk_transfer(dev->usb_handle, T76_MSG_OUT_EP,
                                    data, len, &transferred, T76_USB_TIMEOUT);
@@ -145,6 +170,8 @@ int t76_msg_recv(t76_handle_t *dev, uint8_t *data, size_t len)
         return -1;
     }
 
+    hex_dump("Read", data, transferred > 64 ? 64 : transferred, T76_MSG_IN_EP);
+
     return 0;
 }
 
@@ -157,6 +184,9 @@ int t76_write_payload(t76_handle_t *dev, uint8_t *data, size_t len)
 
     if (!dev || !dev->is_connected)
         return -1;
+
+    if (t76_verbose >= 2)
+        hex_dump("PayloadWrite", data, len > 64 ? 64 : len, T76_PAYLOAD_OUT_EP);
 
     int ret = libusb_bulk_transfer(dev->usb_handle, T76_PAYLOAD_OUT_EP,
                                    data, len, &transferred, T76_USB_TIMEOUT);
@@ -184,6 +214,9 @@ int t76_read_payload(t76_handle_t *dev, uint8_t *data, size_t len)
         fprintf(stderr, "USB read_payload error: %s\n", libusb_strerror(ret));
         return -1;
     }
+
+    if (t76_verbose >= 2)
+        hex_dump("PayloadRead", data, transferred > 64 ? 64 : transferred, T76_PAYLOAD_IN_EP);
 
     return 0;
 }

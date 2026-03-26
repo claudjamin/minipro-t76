@@ -19,6 +19,9 @@
 #include <stddef.h>
 #include <libusb-1.0/libusb.h>
 
+/* Global verbose/debug level: 0=quiet, 1=verbose, 2=debug (hex dumps) */
+extern int t76_verbose;
+
 /* USB device identifiers */
 #define T76_VID              0xA466
 #define T76_PID              0x1A86

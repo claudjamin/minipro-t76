@@ -24,8 +24,8 @@
 #define DEFAULT_CHIPDB_PATH "/usr/share/minipro-t76/chipdb.txt"
 #define LOCAL_CHIPDB_PATH   "./chipdb.txt"
 
+int t76_verbose = 0;
 static t76_handle_t dev;
-static int verbose = 0;
 
 static void cleanup(void)
 {
@@ -136,7 +136,7 @@ int main(int argc, char **argv)
         case 'u': do_unprotect = 1; break;
         case 'P': do_protect = 1; break;
         case 'a': do_adapter = 1; break;
-        case 'v': verbose = 1; break;
+        case 'v': t76_verbose++; break;
         case 'V':
             printf("minipro-t76 v%s\n", VERSION);
             return 0;
@@ -214,11 +214,11 @@ int main(int argc, char **argv)
             return 1;
         }
 
-        if (verbose)
+        if (t76_verbose)
             printf("Selected: %s (ID: %06X, %u bytes)\n",
                    chip->name, chip->chip_id, chip->code_memory_size);
 
-        if (verbose) {
+        if (t76_verbose) {
             const char *at = strchr(chip->name, '@');
             if (at)
                 printf("Package: %s\n", at + 1);
@@ -232,7 +232,7 @@ int main(int argc, char **argv)
         return 1;
     }
 
-    if (verbose)
+    if (t76_verbose)
         t76_print_device_info(&dev);
 
     /* Load FPGA algorithm (required before any chip operation) */
