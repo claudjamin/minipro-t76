@@ -489,16 +489,22 @@ int t76_write_bitstream(t76_handle_t *dev, uint8_t *bitstream, size_t length)
     format_int(&msg[2], BS_PACKET_SIZE, 2, MP_LITTLE_ENDIAN);
     format_int(&msg[4], length, 4, MP_LITTLE_ENDIAN);
 
+    fprintf(stderr, "Bitstream: sending BEGIN (packet_size=%d, total=%zu)\n",
+            BS_PACKET_SIZE, length);
+
     if (t76_msg_send(dev, msg, 8)) {
         fprintf(stderr, "Bitstream: failed to send BEGIN command\n");
         return -1;
     }
 
-    /* Check response (recv into 512-byte msg buffer, request 64) */
+    /* Check response */
+    memset(msg, 0, sizeof(msg));
     if (t76_msg_recv(dev, msg, 64)) {
         fprintf(stderr, "Bitstream: no response to BEGIN command\n");
         return -1;
     }
+    fprintf(stderr, "Bitstream: BEGIN response: %02X %02X %02X %02X %02X %02X %02X %02X\n",
+            msg[0], msg[1], msg[2], msg[3], msg[4], msg[5], msg[6], msg[7]);
     if (msg[1]) {
         fprintf(stderr, "Bitstream: BEGIN rejected (status=0x%02X)\n", msg[1]);
         return -1;
@@ -535,12 +541,16 @@ int t76_write_bitstream(t76_handle_t *dev, uint8_t *bitstream, size_t length)
     }
 
     /* Check final status */
+    memset(msg, 0, sizeof(msg));
     if (t76_msg_recv(dev, msg, 64)) {
         fprintf(stderr, "Bitstream: no response to END command\n");
         return -1;
     }
+    fprintf(stderr, "Bitstream: END response: %02X %02X %02X %02X %02X %02X %02X %02X\n",
+            msg[0], msg[1], msg[2], msg[3], msg[4], msg[5], msg[6], msg[7]);
     if (msg[1]) {
-        fprintf(stderr, "Bitstream: upload rejected (status=0x%02X)\n", msg[1]);
+        fprintf(stderr, "Bitstream: upload rejected (status=0x%02X, sent %zu chunks)\n",
+                msg[1], chunks_sent);
         return -1;
     }
 

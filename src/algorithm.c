@@ -276,6 +276,13 @@ int t76_load_algorithm(t76_handle_t *dev, chip_t *chip, const char *algo_dir_ove
     }
 
     fprintf(stderr, "Loading T76 algorithm: %s (%zu bytes)\n", algo_name, algo_len);
+    fprintf(stderr, "  First 16 bytes: ");
+    for (int i = 0; i < 16 && i < (int)algo_len; i++)
+        fprintf(stderr, "%02X ", bitstream[i]);
+    fprintf(stderr, "\n");
+
+    /* Reset FPGA before uploading new bitstream */
+    t76_reset_fpga(dev);
 
     /* Upload to the T76 FPGA */
     int ret = t76_write_bitstream(dev, bitstream, algo_len);
