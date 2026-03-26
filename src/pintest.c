@@ -149,22 +149,59 @@ int t76_pin_test(t76_handle_t *dev, chip_t *chip)
     if (t76_msg_send(dev, msg, 8))
         return -1;
 
-    memset(msg, 0, sizeof(msg));
-    if (t76_msg_recv(dev, msg, sizeof(msg)))
+    /* Read command response on EP 0x81 */
+    uint8_t resp[64] = { 0 };
+    if (t76_msg_recv(dev, resp, sizeof(resp)))
         return -1;
 
     if (t76_verbose) {
-        fprintf(stderr, "Pin detection full response (%d bytes):\n", (int)sizeof(msg));
-        for (int i = 0; i < 64; i += 16) {
-            fprintf(stderr, "  %04X: ", i);
-            for (int j = 0; j < 16 && i + j < 64; j++)
-                fprintf(stderr, "%02X ", msg[i + j]);
-            fprintf(stderr, "\n");
-        }
+        fprintf(stderr, "Pin detection EP 0x81 response:\n  ");
+        for (int i = 0; i < 16; i++)
+            fprintf(stderr, "%02X ", resp[i]);
+        fprintf(stderr, "\n");
+    }
+
+    /* Try reading pin data from EP 0x82 (payload endpoint) */
+    uint8_t pin_data[64] = { 0 };
+    int got_payload = (t76_read_payload(dev, pin_data, sizeof(pin_data)) == 0);
+
+    if (t76_verbose && got_payload) {
+        fprintf(stderr, "Pin detection EP 0x82 payload:\n  ");
+        for (int i = 0; i < 16; i++)
+            fprintf(stderr, "%02X ", pin_data[i]);
+        fprintf(stderr, "\n");
+    }
+
+    /* If we got payload data, use it. Otherwise try the msg response. */
+    uint8_t *pin_bits;
+    int pin_offset;
+    if (got_payload) {
+        pin_bits = pin_data;
+        pin_offset = 0;
+    } else {
+        /* Fallback: response might have pin data after the 8-byte header */
+        pin_bits = resp;
+        pin_offset = 8;
     }
 
     /* End the transaction after pin test (per reference code) */
     t76_end_transaction(dev);
+
+    /* Dump all possible interpretations in verbose mode */
+    if (t76_verbose) {
+        fprintf(stderr, "\nFull EP 0x81 response (64 bytes):\n");
+        for (int i = 0; i < 64; i += 16) {
+            fprintf(stderr, "  %04X: ", i);
+            for (int j = 0; j < 16 && i + j < 64; j++)
+                fprintf(stderr, "%02X ", resp[i + j]);
+            fprintf(stderr, "  ");
+            for (int j = 0; j < 16 && i + j < 64; j++) {
+                uint8_t c = resp[i + j];
+                fprintf(stderr, "%c", (c >= 32 && c < 127) ? c : '.');
+            }
+            fprintf(stderr, "\n");
+        }
+    }
 
     /* Parse results */
     int bad_pins = 0;
@@ -197,9 +234,8 @@ int t76_pin_test(t76_handle_t *dev, chip_t *chip)
                 /* NC/VCC/GND - don't test, just show role */
                 printf("%-8s ---   ", role_name);
             } else {
-                /* Pin data starts after 8-byte response header */
-                int data_byte = 8 + byte_idx;
-                int is_good = (data_byte < 64) ? ((msg[data_byte] >> bit_idx) & 1) : 0;
+                int data_byte = pin_offset + byte_idx;
+                int is_good = (data_byte < 64) ? ((pin_bits[data_byte] >> bit_idx) & 1) : 0;
                 tested_pins++;
 
                 if (is_good) {
@@ -236,13 +272,16 @@ int t76_pin_test(t76_handle_t *dev, chip_t *chip)
     }
 
     if (t76_verbose) {
-        fprintf(stderr, "\nPin data bytes (binary, starting at offset 8):\n");
+        fprintf(stderr, "\nPin data source: %s (offset %d)\n",
+                got_payload ? "EP 0x82 payload" : "EP 0x81 response", pin_offset);
+        fprintf(stderr, "Pin data bytes (binary):\n");
         for (int i = 0; i < (pin_count + 7) / 8 && i < 8; i++) {
+            int idx = pin_offset + i;
             fprintf(stderr, "  Byte %d (pins %2d-%2d): ", i,
                     i * 8 + 1, i * 8 + 8 > pin_count ? pin_count : i * 8 + 8);
             for (int b = 7; b >= 0; b--)
-                fprintf(stderr, "%d", (msg[8 + i] >> b) & 1);
-            fprintf(stderr, " (0x%02X)\n", msg[8 + i]);
+                fprintf(stderr, "%d", (pin_bits[idx] >> b) & 1);
+            fprintf(stderr, " (0x%02X)\n", pin_bits[idx]);
         }
     }
 
