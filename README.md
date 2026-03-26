@@ -29,6 +29,101 @@ sudo make install    # binary to /usr/local/bin
 sudo make udev       # udev rule for non-root USB access
 ```
 
+## Extracting Required Files from Xgpro (Windows Installer)
+
+minipro-t76 needs two sets of files from the official Windows Xgpro installer that are **not included in this repo** due to size and licensing:
+
+1. **`algoT76/`** -- FPGA algorithm/bitstream files (362 files, ~66MB). **Required** -- without these, the programmer cannot talk to any chip.
+2. **`img/`** -- Adapter setup images (138 files, ~7MB). Optional but helpful.
+
+### Method 1: Extract on Linux (recommended)
+
+```bash
+# Install unrar if needed
+sudo apt install unrar
+
+# Download or copy the Xgpro installer RAR
+# (it's a self-extracting RAR, e.g., Xgpro_T76_V1317.exe)
+
+# Extract everything
+mkdir xgpro_extracted
+unrar x Xgpro_T76_V1317.exe xgpro_extracted/
+
+# Copy the algorithm files (REQUIRED)
+cp -r xgpro_extracted/algoT76 /path/to/minipro-t76/
+
+# Copy the adapter images (optional)
+cp -r xgpro_extracted/img /path/to/minipro-t76/
+
+# Verify
+ls minipro-t76/algoT76/ | wc -l    # should show 362
+ls minipro-t76/img/ | wc -l        # should show 138
+```
+
+### Method 2: Extract on Windows, copy to Linux
+
+If you already have Xgpro installed on Windows:
+
+```
+# The default install path on Windows is:
+D:\Xgpro_T76\
+
+# The files you need:
+D:\Xgpro_T76\algoT76\      (all .alg files)
+D:\Xgpro_T76\img\           (all .jpg files)
+```
+
+Copy them to your Linux machine:
+```bash
+# Via SCP from Windows (using Git Bash, PowerShell, or WSL):
+scp -r "D:\Xgpro_T76\algoT76" user@linux-machine:/path/to/minipro-t76/
+scp -r "D:\Xgpro_T76\img" user@linux-machine:/path/to/minipro-t76/
+
+# Via USB drive:
+# Just copy the algoT76/ and img/ folders to a USB stick,
+# then copy them into the minipro-t76 directory on Linux
+
+# Via shared folder (VMware):
+cp -r /mnt/hgfs/shared/algoT76 /path/to/minipro-t76/
+cp -r /mnt/hgfs/shared/img /path/to/minipro-t76/
+```
+
+### Method 3: From WSL (if Xgpro is installed on the same Windows machine)
+
+```bash
+# WSL can access Windows drives directly
+cp -r /mnt/c/Users/YOUR_USER/path/to/Xgpro_T76/algoT76 /path/to/minipro-t76/
+cp -r /mnt/c/Users/YOUR_USER/path/to/Xgpro_T76/img /path/to/minipro-t76/
+
+# Or if you extracted the RAR in WSL:
+cp -r /mnt/c/Users/YOUR_USER/claude/xgpro_extracted/app/algoT76 /path/to/minipro-t76/
+cp -r /mnt/c/Users/YOUR_USER/claude/xgpro_extracted/app/img /path/to/minipro-t76/
+```
+
+### Method 4: Extract with 7-Zip on Windows
+
+1. Right-click `Xgpro_T76_V1317.exe` → **7-Zip** → **Extract Here** (or **Open Archive**)
+2. Inside you'll see the `algoT76/` and `img/` folders
+3. Copy them to your Linux machine using any method above
+
+### Verify Everything Works
+
+```bash
+cd minipro-t76
+
+# Check algorithm files are present
+ls algoT76/*.alg | head -5
+# Should show: T7_28F32P78.alg, T7_AT45D31.alg, etc.
+
+# Check images are present (optional)
+ls img/*.jpg | head -5
+# Should show: Adapter001.jpg, NoAdapter.jpg, etc.
+
+# Test
+sudo ./minipro-t76 -p "W25Q32 @SOIC8" -d
+# Should now load an algorithm and attempt to read chip ID
+```
+
 ## Hardware Setup
 
 The T76 connects via USB. On Linux:
@@ -40,7 +135,7 @@ lsusb | grep a466
 
 # If running in a VM (VMware/VirtualBox):
 # 1. Connect the T76 to the host via USB
-# 2. In VM settings, pass through the USB device (VID:A466 PID:1A86)
+# 2. In VM menu: VM > Removable Devices > XGecu T76 > Connect
 # 3. Verify with lsusb inside the VM
 ```
 
