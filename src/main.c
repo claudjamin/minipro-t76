@@ -365,26 +365,57 @@ int main(int argc, char **argv)
 
     /* Read */
     if (read_file_path) {
-        uint32_t read_size = chip->code_memory_size;
-        if (!read_size) {
-            fprintf(stderr, "Error: unknown code memory size\n");
-            goto fail_end;
+        if (chip->chip_type == MP_NAND) {
+            /*
+             * NAND read: stream directly to file since NAND dumps
+             * can be very large (e.g. 264MB for 2Gbit).
+             *
+             * Total erase blocks = code_memory_size / (page_size * pages_per_block)
+             * For MT29F2G08: 276824064 / (2112 * 64) = 2048 blocks
+             */
+            uint32_t page_size = chip->page_size ? chip->page_size : 2112;
+            uint32_t ppb = chip->pages_per_block ? chip->pages_per_block : 64;
+            uint32_t total_blocks = chip->code_memory_size / (page_size * ppb);
+            if (!total_blocks) total_blocks = 2048; /* fallback for MT29F2G08 */
+
+            uint64_t total_bytes = (uint64_t)total_blocks * T76_NAND_BYTES_PER_CMD;
+            printf("Reading NAND: %u erase blocks, %llu bytes (%.1f MB)...\n",
+                   total_blocks, (unsigned long long)total_bytes,
+                   (double)total_bytes / (1024.0 * 1024.0));
+
+            FILE *fout = fopen(read_file_path, "wb");
+            if (!fout) {
+                fprintf(stderr, "Error: cannot create '%s'\n", read_file_path);
+                goto fail_end;
+            }
+
+            ret = t76_nand_read(&dev, chip, NULL, total_blocks, fout);
+            fclose(fout);
+            if (ret < 0) goto fail_end;
+
+            printf("Saved to '%s'\n", read_file_path);
+        } else {
+            uint32_t read_size = chip->code_memory_size;
+            if (!read_size) {
+                fprintf(stderr, "Error: unknown code memory size\n");
+                goto fail_end;
+            }
+
+            uint8_t *buf = calloc(1, read_size);
+            if (!buf) { fprintf(stderr, "Out of memory\n"); goto fail_end; }
+
+            printf("Reading %u bytes...\n", read_size);
+            extern int t76_read_code_memory(t76_handle_t *, chip_t *, uint8_t *);
+            ret = t76_read_code_memory(&dev, chip, buf);
+            if (ret < 0) { free(buf); goto fail_end; }
+
+            file_format_t out_fmt = (file_fmt == FMT_AUTO) ? FMT_BIN : file_fmt;
+            ret = file_write_buf(read_file_path, out_fmt, buf, read_size);
+            free(buf);
+            if (ret < 0) goto fail_end;
+
+            printf("Saved to '%s'\n", read_file_path);
         }
-
-        uint8_t *buf = calloc(1, read_size);
-        if (!buf) { fprintf(stderr, "Out of memory\n"); goto fail_end; }
-
-        printf("Reading %u bytes...\n", read_size);
-        extern int t76_read_code_memory(t76_handle_t *, chip_t *, uint8_t *);
-        ret = t76_read_code_memory(&dev, chip, buf);
-        if (ret < 0) { free(buf); goto fail_end; }
-
-        file_format_t out_fmt = (file_fmt == FMT_AUTO) ? FMT_BIN : file_fmt;
-        ret = file_write_buf(read_file_path, out_fmt, buf, read_size);
-        free(buf);
-        if (ret < 0) goto fail_end;
-
-        printf("Saved to '%s'\n", read_file_path);
     }
 
     /* Verify (standalone) */

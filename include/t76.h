@@ -234,6 +234,16 @@ int t76_write_bitstream(t76_handle_t *dev, uint8_t *bitstream, size_t length);
 int t76_reset_fpga(t76_handle_t *dev);
 int t76_load_algorithm(t76_handle_t *dev, chip_t *chip, const char *algo_dir);
 
+/* NAND operations */
+#define T76_NAND_INIT         0x02  /* NAND init command (64 bytes) */
+#define T76_NAND_CHUNK_SIZE   33792 /* 16 pages x 2112 bytes */
+#define T76_NAND_CHUNKS_PER_CMD 4   /* 4 chunks per READ_CODE = 1 erase block */
+#define T76_NAND_BYTES_PER_CMD (T76_NAND_CHUNK_SIZE * T76_NAND_CHUNKS_PER_CMD)
+
+int t76_nand_begin_transaction(t76_handle_t *dev, chip_t *chip);
+int t76_nand_read(t76_handle_t *dev, chip_t *chip, uint8_t *buf,
+                  uint32_t total_blocks, FILE *outfile);
+
 /* Pin contact test */
 int t76_pin_test(t76_handle_t *dev, chip_t *chip);
 

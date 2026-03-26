@@ -61,6 +61,10 @@ int t76_begin_transaction(t76_handle_t *dev, chip_t *chip)
     uint8_t msg[64] = { 0 };
     uint8_t ovc;
 
+    /* NAND chips use a completely different init sequence */
+    if (chip->chip_type == MP_NAND)
+        return t76_nand_begin_transaction(dev, chip);
+
     msg[0] = T76_BEGIN_TRANS;
     msg[1] = chip->protocol_id;
     msg[2] = (uint8_t)chip->variant;
@@ -663,6 +667,179 @@ int t76_read_code_memory(t76_handle_t *dev, chip_t *chip, uint8_t *buf)
         offset += chunk;
         print_progress(offset, total, "Reading");
     }
+
+    return 0;
+}
+
+/*
+ * NAND-specific initialization and transaction.
+ *
+ * NAND chips require a special init sequence before BEGIN_TRANS:
+ *   1. Send NAND_INIT (cmd 0x02, 64 bytes) on EP 0x01
+ *   2. Send BEGIN_TRANS (128 bytes, NOT the normal 64!) on EP 0x01
+ *
+ * These are currently hardcoded for MT29F2G08 (Micron 2Gbit NAND).
+ */
+static const uint8_t nand_init_data[64] = {
+    0x02,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x40,0x00,0x00,0x08,0x00,0x08,0x40,0x00,
+    0x01,0x00,0x01,0x00,0x03,0x00,0x00,0x00,0x08,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
+    0x00,0x00,0x01,0x00,0x3B,0x4F,0x15,0x27,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
+    0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00
+};
+
+static const uint8_t nand_begin_trans_data[128] = {
+    0x03,0x2D,0x00,0x00,0x06,0x00,0xA0,0x6F,0x00,0x00,0x00,0x08,0x40,0x00,0x20,0x00,
+    0x00,0x10,0x02,0x00,0x00,0x06,0x00,0x00,0x03,0x00,0x00,0x00,0x03,0x00,0x00,0x00,
+    0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x08,0x00,0x00,0x00,0x00,0x21,0x00,0x00,
+    0x40,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x78,0x08,0x00,0x00,0x00,0x00,0x00,0x84,
+    0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
+    0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
+    0x2F,0x27,0x09,0x0B,0x00,0x03,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
+    0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00
+};
+
+int t76_nand_begin_transaction(t76_handle_t *dev, chip_t *chip)
+{
+    uint8_t ovc;
+    t76_status_t status;
+
+    (void)chip; /* Currently hardcoded for MT29F2G08 */
+
+    if (t76_verbose)
+        fprintf(stderr, "NAND: sending NAND_INIT (64 bytes)\n");
+
+    /* Step 1: NAND_INIT (cmd 0x02) */
+    if (t76_msg_send(dev, (uint8_t *)nand_init_data, 64))
+        return -1;
+
+    if (t76_verbose)
+        fprintf(stderr, "NAND: sending BEGIN_TRANS (128 bytes)\n");
+
+    /* Step 2: Extended 128-byte BEGIN_TRANS */
+    if (t76_msg_send(dev, (uint8_t *)nand_begin_trans_data, 128))
+        return -1;
+
+    /* Check overcurrent */
+    if (t76_get_ovc_status(dev, &status, &ovc))
+        return -1;
+
+    if (t76_verbose)
+        fprintf(stderr, "NAND OVC status: error=%02X ovc=%02X\n",
+                status.error, ovc);
+
+    if (ovc) {
+        fprintf(stderr, "Overcurrent protection!\n");
+        return -1;
+    }
+
+    return 0;
+}
+
+/*
+ * NAND read - streams entire NAND flash using the Xgpro READ_CODE protocol.
+ *
+ * Protocol (from Wireshark capture):
+ *   - Send READ_CODE (0x0D) on EP 0x01, 16 bytes:
+ *     0D 00 [block_LE16] 10 00 04 00 08 00 08 00 69 01 00 00
+ *   - Each command produces 4 chunks of 33792 bytes on EP 0x82
+ *   - 33792 = 16 NAND pages x 2112 bytes (2048 data + 64 spare)
+ *   - 4 chunks = 64 pages = 1 NAND erase block = 135168 bytes
+ *   - No response header to strip - raw page data
+ *
+ * If outfile is non-NULL, data is streamed to the file (for large NAND).
+ * If buf is non-NULL, data is also stored in memory.
+ * total_blocks = number of erase blocks to read (e.g. 2048 for MT29F2G08).
+ */
+int t76_nand_read(t76_handle_t *dev, chip_t *chip, uint8_t *buf,
+                  uint32_t total_blocks, FILE *outfile)
+{
+    uint8_t msg[16];
+    uint8_t *chunk_buf;
+    uint32_t blk, c;
+    uint32_t errors = 0;
+    uint64_t total_bytes = (uint64_t)total_blocks * T76_NAND_BYTES_PER_CMD;
+
+    (void)chip;
+
+    chunk_buf = malloc(T76_NAND_CHUNK_SIZE);
+    if (!chunk_buf) {
+        fprintf(stderr, "Out of memory\n");
+        return -1;
+    }
+
+    if (t76_verbose)
+        fprintf(stderr, "NAND read: %u blocks, %u bytes/block, total %llu bytes\n",
+                total_blocks, T76_NAND_BYTES_PER_CMD,
+                (unsigned long long)total_bytes);
+
+    for (blk = 0; blk < total_blocks; blk++) {
+        /* Build READ_CODE command - exact Xgpro format */
+        memset(msg, 0, 16);
+        msg[0]  = T76_READ_CODE;    /* 0x0D */
+        msg[2]  = (uint8_t)(blk & 0xFF);
+        msg[3]  = (uint8_t)((blk >> 8) & 0xFF);
+        msg[4]  = 0x10; msg[5]  = 0x00;  /* 16 pages per chunk */
+        msg[6]  = 0x04; msg[7]  = 0x00;
+        msg[8]  = 0x08; msg[9]  = 0x00;
+        msg[10] = 0x08; msg[11] = 0x00;
+        msg[12] = 0x69; msg[13] = 0x01;
+
+        if (t76_msg_send(dev, msg, 16)) {
+            fprintf(stderr, "\nNAND read: failed to send command for block %u\n", blk);
+            free(chunk_buf);
+            return -1;
+        }
+
+        /* Read 4 chunks of 33792 bytes each */
+        for (c = 0; c < T76_NAND_CHUNKS_PER_CMD; c++) {
+            uint32_t offset = (uint32_t)((uint64_t)blk * T76_NAND_BYTES_PER_CMD +
+                              (uint64_t)c * T76_NAND_CHUNK_SIZE);
+
+            if (t76_read_payload(dev, chunk_buf, T76_NAND_CHUNK_SIZE)) {
+                errors++;
+                fprintf(stderr, "\n  Block %u chunk %u: read FAILED\n", blk, c);
+                memset(chunk_buf, 0xFF, T76_NAND_CHUNK_SIZE);
+
+                if (outfile)
+                    fwrite(chunk_buf, 1, T76_NAND_CHUNK_SIZE, outfile);
+                if (buf)
+                    memcpy(buf + offset, chunk_buf, T76_NAND_CHUNK_SIZE);
+
+                /* Drain remaining chunks */
+                for (uint32_t d = c + 1; d < T76_NAND_CHUNKS_PER_CMD; d++) {
+                    t76_read_payload(dev, chunk_buf, T76_NAND_CHUNK_SIZE);
+                    memset(chunk_buf, 0xFF, T76_NAND_CHUNK_SIZE);
+                    uint32_t doff = (uint32_t)((uint64_t)blk * T76_NAND_BYTES_PER_CMD +
+                                    (uint64_t)d * T76_NAND_CHUNK_SIZE);
+                    if (outfile)
+                        fwrite(chunk_buf, 1, T76_NAND_CHUNK_SIZE, outfile);
+                    if (buf)
+                        memcpy(buf + doff, chunk_buf, T76_NAND_CHUNK_SIZE);
+                }
+                break;
+            }
+
+            if (outfile)
+                fwrite(chunk_buf, 1, T76_NAND_CHUNK_SIZE, outfile);
+            if (buf)
+                memcpy(buf + offset, chunk_buf, T76_NAND_CHUNK_SIZE);
+        }
+
+        if (errors > 5) {
+            fprintf(stderr, "Too many read errors, aborting.\n");
+            free(chunk_buf);
+            return -1;
+        }
+
+        /* Progress bar */
+        uint64_t bytes_done = (uint64_t)(blk + 1) * T76_NAND_BYTES_PER_CMD;
+        print_progress((size_t)bytes_done, (size_t)total_bytes, "Reading NAND");
+    }
+
+    free(chunk_buf);
+
+    if (errors > 0)
+        fprintf(stderr, "Warning: %u read errors (filled with 0xFF)\n", errors);
 
     return 0;
 }

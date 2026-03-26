@@ -388,6 +388,89 @@ sudo ./minipro-t76 -p "AT28C256 @DIP28" -r contents.bin
 sudo ./minipro-t76 -p "AT28C256 @DIP28" -e -w new_data.bin
 ```
 
+### Step-by-Step: Reading NAND Flash
+
+NAND flash chips (MT29F, K9F, etc.) use a different protocol than SPI/NOR flash. The tool handles this automatically when the chip type is NAND.
+
+**Supported NAND chips:** Currently verified with MT29F2G08 (Micron 2Gbit, 256MB + spare). Other NAND chips in the database should work if they use the same page geometry.
+
+**Step 1: Find your chip**
+
+```bash
+./minipro-t76 -l "MT29F*"
+./minipro-t76 -l "K9F*"       # Samsung NAND
+./minipro-t76 -l "TC58*"      # Kioxia/Toshiba NAND
+```
+
+**Step 2: Check adapter setup**
+
+Most NAND chips use the TSOP48 adapter:
+```bash
+./minipro-t76 -p "MT29F2G08ABDWP@TSOP48" -a
+```
+
+**Step 3: Read the chip**
+
+```bash
+# Reads the full NAND including spare/OOB area
+sudo ./minipro-t76 -p "MT29F2G08ABDWP@TSOP48" -r nand_dump.bin
+```
+
+The dump includes both data and spare (OOB) bytes for every page. For MT29F2G08:
+- Page size: 2048 bytes data + 64 bytes spare = 2112 bytes/page
+- 64 pages per erase block, 2048 erase blocks
+- Total dump: 2048 x 64 x 2112 = 276,824,064 bytes (~264 MB)
+
+**Step 4: Extract data-only content (optional)**
+
+The dump contains interleaved data+spare. To extract just the data bytes:
+```bash
+# Python one-liner to strip spare bytes
+python3 -c "
+import sys
+with open('nand_dump.bin','rb') as f, open('nand_data.bin','wb') as o:
+    while True:
+        page = f.read(2112)
+        if len(page) < 2112: break
+        o.write(page[:2048])
+"
+```
+
+**Windows alternative (nand_final.exe):**
+
+If native Linux USB does not work (e.g., when using usbipd to forward USB from Windows to WSL), a standalone Windows tool is provided:
+
+```bash
+# Cross-compile from Linux
+make nand-win
+
+# Or on Windows with MinGW:
+# x86_64-w64-mingw32-gcc -O2 -o nand_final.exe tools/nand_final.c -lwinusb -lsetupapi
+```
+
+Run on Windows:
+```
+nand_final.exe output.bin
+```
+
+This uses the WinUSB driver directly and produces an identical dump.
+
+### NAND Read Protocol Details
+
+The NAND read protocol was reverse-engineered from Wireshark captures of the official Xgpro software:
+
+1. Upload FPGA bitstream (same as for any chip)
+2. Send **NAND_INIT** (cmd 0x02, 64 bytes) -- configures the NAND interface
+3. Send **BEGIN_TRANS** (128 bytes, extended format) -- starts the NAND transaction
+4. For each erase block (0 to 2047):
+   - Send **READ_CODE** (0x0D, 16 bytes) with block counter
+   - Receive **4 chunks of 33,792 bytes** on EP 0x82 (no header)
+   - Each chunk = 16 pages x 2112 bytes
+   - 4 chunks = 64 pages = 1 complete erase block
+5. Send **END_TRANS** (0x04)
+
+Total: 2048 commands x 135,168 bytes/command = 276,824,064 bytes
+
 ### Pin Contact Test (-z)
 
 Before reading/writing, check if the chip is making good contact with the socket:

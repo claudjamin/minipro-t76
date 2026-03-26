@@ -16,7 +16,13 @@ TARGET = minipro-t76
 TOOL_SRCS = tools/extract_chipdb.c
 TOOL_TARGET = tools/extract_chipdb
 
-.PHONY: all clean install uninstall udev tools
+# Windows cross-compilation (MinGW)
+MINGW_CC ?= x86_64-w64-mingw32-gcc
+MINGW_CFLAGS ?= -Wall -Wextra -O2
+NAND_WIN_SRC = tools/nand_final.c
+NAND_WIN_TARGET = tools/nand_final.exe
+
+.PHONY: all clean install uninstall udev tools nand-win
 
 all: $(TARGET)
 
@@ -32,8 +38,13 @@ $(TOOL_TARGET): $(TOOL_SRCS)
 	@mkdir -p tools
 	$(CC) $(CFLAGS) -o $@ $<
 
+nand-win: $(NAND_WIN_TARGET)
+
+$(NAND_WIN_TARGET): $(NAND_WIN_SRC)
+	$(MINGW_CC) $(MINGW_CFLAGS) -o $@ $< -lwinusb -lsetupapi
+
 clean:
-	rm -f $(OBJS) $(TARGET) $(TOOL_TARGET)
+	rm -f $(OBJS) $(TARGET) $(TOOL_TARGET) $(NAND_WIN_TARGET)
 
 install: $(TARGET)
 	install -d $(DESTDIR)$(BINDIR)
