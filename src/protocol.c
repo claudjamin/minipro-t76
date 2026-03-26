@@ -606,17 +606,43 @@ int t76_read_code_memory(t76_handle_t *dev, chip_t *chip, uint8_t *buf)
     uint32_t total = chip->code_memory_size;
     uint32_t block_size = chip->read_buffer_size;
     uint32_t offset = 0;
+    uint32_t block_count;
 
     if (!block_size)
         block_size = 256;
 
+    block_count = (total + block_size - 1) / block_size;
+
+    if (t76_verbose)
+        fprintf(stderr, "Read: total=%u, block_size=%u, block_count=%u\n",
+                total, block_size, block_count);
+
+    /*
+     * T76 read protocol for MP_CODE:
+     * 1. Send READ_CODE command with block_size, address=0, and block_count
+     * 2. Then read block_count chunks of block_size from EP 0x82
+     *
+     * The command is sent only ONCE (is_first=1), then all subsequent
+     * reads are just payload reads from EP 0x82.
+     */
     while (offset < total) {
         uint32_t chunk = total - offset;
         if (chunk > block_size)
             chunk = block_size;
 
-        if (t76_read_block(dev, chip, MP_CODE, offset, buf + offset,
-                           chunk, (offset == 0)))
+        if (offset == 0) {
+            /* First block: send command with block_count */
+            uint8_t msg[64] = { 0 };
+            msg[0] = T76_READ_CODE;
+            format_int(&msg[2], block_size, 2, MP_LITTLE_ENDIAN);
+            format_int(&msg[4], 0, 4, MP_LITTLE_ENDIAN); /* start address */
+            format_int(&msg[8], block_count, 4, MP_LITTLE_ENDIAN);
+
+            if (t76_msg_send(dev, msg, 16))
+                return -1;
+        }
+
+        if (t76_read_payload(dev, buf + offset, chunk))
             return -1;
 
         offset += chunk;
