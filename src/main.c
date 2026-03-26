@@ -109,6 +109,7 @@ int main(int argc, char **argv)
     int do_erase = 0, do_detect = 0, do_info = 0;
     int do_list = 0, do_unprotect = 0, do_protect = 0;
     int do_adapter = 0, do_pintest = 0;
+    int skip_id = 0;
     int ret;
 
     static struct option long_opts[] = {
@@ -118,7 +119,7 @@ int main(int argc, char **argv)
     };
 
     int opt;
-    while ((opt = getopt_long(argc, argv, "p:r:w:m:f:D:I:A:l::ediuPazvhV",
+    while ((opt = getopt_long(argc, argv, "p:r:w:m:f:D:I:A:l::ediuPazyvhV",
                               long_opts, NULL)) != -1) {
         switch (opt) {
         case 'p': chip_name = optarg; break;
@@ -137,6 +138,7 @@ int main(int argc, char **argv)
         case 'P': do_protect = 1; break;
         case 'a': do_adapter = 1; break;
         case 'z': do_pintest = 1; break;
+        case 'y': skip_id = 1; break;
         case 'v': t76_verbose++; break;
         case 'V':
             printf("minipro-t76 v%s\n", VERSION);
@@ -277,11 +279,22 @@ int main(int argc, char **argv)
             printf("Chip ID: 0x%06X\n", chip_id);
             printf("  Manufacturer: 0x%02X\n", chip_id & 0xFF);
             printf("  Device: 0x%04X\n", (chip_id >> 8) & 0xFFFF);
+
+            if (chip && chip->chip_id && chip_id != chip->chip_id) {
+                printf("  WARNING: ID mismatch! Expected 0x%06X\n", chip->chip_id);
+                if (skip_id) {
+                    printf("  Continuing anyway (-y skip ID check)\n");
+                } else {
+                    printf("  Use -y to skip ID validation and proceed anyway.\n");
+                    printf("  This is useful for compatible/rebranded chips.\n");
+                }
+            }
         }
 
         if (chip) t76_end_transaction(&dev);
 
-        if (!read_file_path && !write_file_path && !do_erase)
+        if (!skip_id && chip && chip->chip_id && chip_id != chip->chip_id &&
+            !read_file_path && !write_file_path && !do_erase)
             goto done;
     }
 
