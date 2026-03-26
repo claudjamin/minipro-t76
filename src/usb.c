@@ -170,6 +170,9 @@ int t76_msg_recv(t76_handle_t *dev, uint8_t *data, size_t len)
         return -1;
     }
 
+    if (t76_verbose >= 2)
+        fprintf(stderr, "\033[33mRead %d bytes (requested %zu) on EP 0x%02X\033[0m\n",
+                transferred, len, T76_MSG_IN_EP);
     hex_dump("Read", data, transferred > 64 ? 64 : transferred, T76_MSG_IN_EP);
 
     return 0;

@@ -234,6 +234,9 @@ int t76_write_bitstream(t76_handle_t *dev, uint8_t *bitstream, size_t length);
 int t76_reset_fpga(t76_handle_t *dev);
 int t76_load_algorithm(t76_handle_t *dev, chip_t *chip, const char *algo_dir);
 
+/* Pin contact test */
+int t76_pin_test(t76_handle_t *dev, chip_t *chip);
+
 /* Chip database */
 int chipdb_load(const char *path);
 void chipdb_free(void);

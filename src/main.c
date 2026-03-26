@@ -108,7 +108,7 @@ int main(int argc, char **argv)
     file_format_t file_fmt = FMT_AUTO;
     int do_erase = 0, do_detect = 0, do_info = 0;
     int do_list = 0, do_unprotect = 0, do_protect = 0;
-    int do_adapter = 0;
+    int do_adapter = 0, do_pintest = 0;
     int ret;
 
     static struct option long_opts[] = {
@@ -118,7 +118,7 @@ int main(int argc, char **argv)
     };
 
     int opt;
-    while ((opt = getopt_long(argc, argv, "p:r:w:m:f:D:I:A:l::ediuPavhV",
+    while ((opt = getopt_long(argc, argv, "p:r:w:m:f:D:I:A:l::ediuPazvhV",
                               long_opts, NULL)) != -1) {
         switch (opt) {
         case 'p': chip_name = optarg; break;
@@ -136,6 +136,7 @@ int main(int argc, char **argv)
         case 'u': do_unprotect = 1; break;
         case 'P': do_protect = 1; break;
         case 'a': do_adapter = 1; break;
+        case 'z': do_pintest = 1; break;
         case 'v': t76_verbose++; break;
         case 'V':
             printf("minipro-t76 v%s\n", VERSION);
@@ -240,6 +241,20 @@ int main(int argc, char **argv)
         ret = t76_load_algorithm(&dev, chip, algo_dir);
         if (ret < 0)
             goto fail;
+    }
+
+    /* Pin contact test */
+    if (do_pintest && chip) {
+        ret = t76_begin_transaction(&dev, chip);
+        if (ret < 0) goto fail;
+
+        ret = t76_pin_test(&dev, chip);
+        /* pin_test calls end_transaction internally */
+
+        if (!do_detect && !read_file_path && !write_file_path && !do_erase)
+            goto done;
+
+        /* Need to re-begin for subsequent operations */
     }
 
     /* Detect chip ID */
