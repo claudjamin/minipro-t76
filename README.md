@@ -36,6 +36,27 @@ minipro-t76 needs two sets of files from the official Windows Xgpro installer th
 1. **`algoT76/`** -- FPGA algorithm/bitstream files (362 files, ~66MB). **Required** -- without these, the programmer cannot talk to any chip.
 2. **`img/`** -- Adapter setup images (138 files, ~7MB). Optional but helpful.
 
+### Where to Get the Xgpro Installer
+
+| Source | Link | Notes |
+|--------|------|-------|
+| **XGecu Official** | http://www.xgecu.com/en/Download.html | May be slow/blocked (hosted in China) |
+| **Minipro project** (recommended) | https://gitlab.com/DavidGriffith/minipro | Open-source alternative with its own database. Includes `infoic.xml` with full chip parameters and algorithm support. Build from source to get a working T76 tool without needing Xgpro at all. |
+| **Minipro releases** | https://661.org/files/minipro/ | Pre-built tarballs of the minipro project |
+| **T76 hardware docs** | https://github.com/radiomanV/Xgecu_T76 | FPGA pin maps, schematics, bitstream tools |
+
+**If xgecu.com is blocked or slow:** The Xgpro installer is a self-extracting RAR. It's often shared on electronics forums, EEVblog, and included on USB drives shipped with the programmer. Check the USB drive that came with your T76 -- it usually has the installer on it.
+
+**Alternative: Use minipro directly.** The open-source [minipro](https://gitlab.com/DavidGriffith/minipro) project fully supports the T76 and bundles its own chip database (`infoic.xml`) and algorithm files. It doesn't need any files from Xgpro:
+```bash
+git clone https://gitlab.com/DavidGriffith/minipro.git
+cd minipro
+sudo apt install build-essential libusb-1.0-0-dev pkg-config
+make
+sudo make install
+sudo minipro -p "W25Q32JV @SOIC8" -r dump.bin
+```
+
 ### Method 1: Extract on Linux (recommended)
 
 ```bash
