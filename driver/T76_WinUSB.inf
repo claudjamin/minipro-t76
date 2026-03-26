@@ -1,0 +1,72 @@
+;---------------------------------------------------------------------------------
+; minipro-t76 WinUSB Driver
+; Clean WinUSB driver for XGecu T76 Programmer
+;
+; This uses ONLY Microsoft's built-in WinUSB.sys driver.
+; No custom binaries, no phone-home, no telemetry.
+;
+; Install: Right-click this file > "Install"
+;          Or: Device Manager > Update Driver > Browse > Select this folder
+;---------------------------------------------------------------------------------
+
+[Version]
+Signature = "$Windows NT$"
+Class = USBDevice
+ClassGuid = {88BAE032-5A81-49f0-BC3D-A4FF138216D6}
+Provider = %MFGNAME%
+DriverVer = 03/26/2026,1.0.0.0
+
+[Manufacturer]
+%MFGNAME% = DeviceList,NTx86,NTamd64
+
+[DeviceList.NTx86]
+%DESCRIPTION% = USB_Install, USB\VID_A466&PID_1A86
+
+[DeviceList.NTamd64]
+%DESCRIPTION% = USB_Install, USB\VID_A466&PID_1A86
+
+; =================== Class Setup ===================
+
+[ClassInstall32]
+AddReg = ClassInstall_AddReg
+
+[ClassInstall_AddReg]
+HKR,,,0,%CLASSNAME%
+HKR,,Icon,,-20
+
+; =================== Installation ===================
+
+[USB_Install]
+Include = winusb.inf
+Needs = WINUSB.NT
+
+[USB_Install.Services]
+Include = winusb.inf
+AddService = WinUSB,0x00000002,WinUSB_ServiceInstall
+
+[WinUSB_ServiceInstall]
+DisplayName   = %WinUSB_SvcDesc%
+ServiceType   = 1
+StartType     = 3
+ErrorControl  = 1
+ServiceBinary = %12%\WinUSB.sys
+
+[USB_Install.Wdf]
+KmdfService = WINUSB, WinUsb_Install
+
+[WinUSB_Install]
+KmdfLibraryVersion = 1.11
+
+[USB_Install.HW]
+AddReg = Dev_AddReg
+
+[Dev_AddReg]
+HKR,,DeviceInterfaceGUIDs,0x10000,"{015DE341-91CC-8286-3964-1A006BC1F00F}"
+
+; =================== Strings ===================
+
+[Strings]
+MFGNAME = "minipro-t76"
+DESCRIPTION = "XGecu T76 Programmer (minipro-t76)"
+WinUSB_SvcDesc = "XGecu T76 WinUSB"
+CLASSNAME = "USB Programmer Devices"

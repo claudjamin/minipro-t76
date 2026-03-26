@@ -198,7 +198,7 @@ int t76_get_chip_id(t76_handle_t *dev, chip_t *chip, uint8_t *type,
         uint8_t endian = (id_type == MP_ID_TYPE3 || id_type == MP_ID_TYPE4)
                          ? MP_LITTLE_ENDIAN : MP_BIG_ENDIAN;
 
-        *device_id = (uint32_t)load_int(&msg[2], id_bytes, endian);
+        *device_id = (uint32_t)load_int(&msg[3], id_bytes, endian);
     }
 
     return 0;
